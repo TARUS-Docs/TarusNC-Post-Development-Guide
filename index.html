@@ -1,0 +1,2069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TarusNC Post-Processor Guide (TARUS)</title>
+    <!-- 
+      DEVELOPER NOTE:
+      TARUS MASTER DOCUMENTATION TEMPLATE
+      - Features: Responsive CSS, Mobile Sidebar, Interactive Edit Mode, Custom Field Guide Export.
+      - Do not alter the core CSS classes or JS engine logic.
+    -->
+    <style>
+        /* General Styling */
+        @page { size: letter; margin: 2.5cm 2cm; }
+        body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; scroll-behavior: smooth; }
+        
+        /* Layout Components */
+        .page-header, .page-footer { background-color: #000000; color: #ffffff; padding: 25px 40px; text-align: center; position: relative; }
+        .page-header { display: flex; align-items: center; justify-content: center; min-height: 120px; border-bottom: 5px solid #84BD00; }
+        .header-title { font-size: 2.6em; font-weight: 700; margin: 0; z-index: 2; letter-spacing: 0.5px; }
+        .page-footer { margin-top: 40px; font-size: 0.9em; color: #ccc; background-color: #1a1a1a; border-top: 3px solid #84BD00; padding: 20px; }
+
+        .container { max-width: 1500px; margin: 40px auto; background-color: #ffffff; padding: 40px; box-shadow: 0 4px 25px rgba(0,0,0,0.1); border-radius: 4px; }
+
+        .main-layout { display: flex; gap: 40px; align-items: flex-start; }
+        .sidebar { position: sticky; top: 20px; width: 300px; min-width: 300px; background-color: #f9f9f9; padding: 25px; border-radius: 6px; border: 1px solid #eee; border-left: 4px solid #84BD00; height: fit-content; max-height: 90vh; overflow-y: auto; }
+        .sidebar h4 { margin-top: 0; color: #000; font-size: 0.9em; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 15px; }
+        .sidebar .category-label { font-weight: bold; color: #84BD00; font-size: 0.85em; margin-top: 15px; display: block; letter-spacing: 0.5px; }
+        .sidebar ul { list-style: none; padding: 0; margin: 5px 0 15px 0; }
+        .sidebar li { margin-bottom: 6px; font-size: 0.85em; padding-left: 10px; }
+        .sidebar li a { text-decoration: none; color: #555; transition: color 0.2s; }
+        .sidebar li a:hover { color: #000; text-decoration: underline; }
+        .content-area { flex: 1; min-width: 0; }
+
+        /* Navigation */
+        .tab-nav { border-bottom: 3px solid #84BD00; padding-bottom: 0; margin-bottom: 35px; display: flex; flex-wrap: wrap; gap: 5px; }
+        .tab-button { padding: 14px 25px; cursor: pointer; background-color: #f0f0f0; border: 1px solid #ddd; border-bottom: none; border-radius: 4px 4px 0 0; font-size: 14px; font-weight: bold; color: #555; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tab-button:hover:not([disabled]) { background-color: #e5e5e5; color: #000; }
+        .tab-button[aria-selected="true"] { background-color: #ffffff; border-color: #84BD00; border-width: 3px 3px 0 3px; border-bottom: 3px solid #ffffff; margin-bottom: -3px; color: #000; outline: none; }
+        
+        /* Locked Tab Styling */
+        .tab-button[disabled] { opacity: 0.5; cursor: not-allowed; background-color: #e0e0e0; color: #999; border-color: #ccc; }
+        .tab-button[disabled]::after { content: " 🔒"; font-size: 0.8em; vertical-align: middle; }
+        
+        .mode-selector { background-color: #f0f0f0; padding: 20px; border-radius: 4px; margin-bottom: 30px; border-left: 5px solid #84BD00; display: flex; align-items: center; gap: 15px; }
+        .mode-toggle-btn { background-color: #333; color: white; border: none; padding: 12px 24px; cursor: pointer; border-radius: 3px; font-weight: bold; transition: all 0.2s; }
+        .mode-toggle-btn[aria-pressed="true"] { background-color: #84BD00; color: #000; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        /* Content Sections */
+        .section { margin-bottom: 80px; padding-bottom: 40px; border-bottom: 1px solid #eee; position: relative; transition: box-shadow 0.2s; }
+        h2 { border-left: 5px solid #84BD00; padding-left: 15px; color: #000; margin-top: 0; font-size: 2.1em; font-weight: 600; }
+        h3 { color: #333; margin-top: 30px; font-size: 1.6em; font-weight: 600; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        h4 { font-weight: bold; color: #84BD00; text-transform: uppercase; font-size: 1em; margin-top: 25px; }
+        p { text-align: justify; color: #444; }
+        ul { color: #444; }
+        
+        .tab-content, .head-mode-content { display: none; }
+        .tab-content[aria-hidden="false"], .head-mode-content[aria-hidden="false"] { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Media */
+        .manual-image { display: block; max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; margin: 40px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .image-caption { font-size: 0.95em; font-style: italic; color: #444; text-align: center; margin-top: -30px; margin-bottom: 40px; font-weight: 500; }
+
+        .spec-table { width: 100%; border: 1px solid #e0e0e0; background-color: #fafafa; font-size: 0.95em; border-collapse: collapse; margin-bottom: 20px; }
+        .spec-table th { background-color: #333; color: #fff; border-bottom: 4px solid #84BD00; padding: 12px; text-align: left; }
+        .spec-table td { border-bottom: 1px solid #e0e0e0; padding: 10px 12px; }
+        .spec-table tr:nth-child(even) { background-color: #f8f8f8; }
+
+        /* Code Block Enhancement */
+        code { 
+            font-family: "Consolas", "Monaco", "Courier New", monospace; 
+            font-size: 1em; 
+            color: #004488; 
+            background-color: #e8f0f8; 
+            padding: 2px 5px; 
+            border-radius: 3px; 
+        }
+
+        pre { 
+            background-color: #1a1a1a; 
+            border: 1px solid #333; 
+            padding: 24px; 
+            border-radius: 6px; 
+            font-family: "Consolas", "Monaco", "Courier New", monospace; 
+            white-space: pre-wrap; 
+            font-size: 15px; 
+            line-height: 1.5;
+            color: #e6e6e6; 
+            border-left: 6px solid #84BD00; 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        pre code { 
+            font-size: inherit; 
+            color: inherit; 
+            background-color: transparent; 
+            padding: 0; 
+        }
+
+        .two-column-list { display: flex; gap: 40px; flex-wrap: wrap; }
+        .two-column-list > div { flex: 1; min-width: 350px; }
+
+        /* Alerts */
+        .warning-box { background-color: #fff0f0; border-left: 5px solid #cc0000; padding: 20px; margin: 20px 0; color: #cc0000; font-weight: normal; border-radius: 3px;}
+        .warning-box strong { color: #990000; }
+        .info-box { background-color: #f0f8ff; border-left: 5px solid #005a9c; padding: 20px; margin: 20px 0; color: #003a66; border-radius: 3px; }
+        .info-box strong { color: #002244; }
+
+        /* ========================================= */
+        /* MOBILE RESPONSIVENESS ADDITIONS           */
+        /* ========================================= */
+        .mobile-header { display: none; background-color: #000; padding: 15px 20px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1000; border-bottom: 3px solid #84BD00; }
+        .mobile-header h2 { color: #fff; margin: 0; font-size: 1.2em; border: none; padding: 0; flex-grow: 1; text-align: center; }
+        .mobile-menu-btn { background: #333; border: 1px solid #555; color: #fff; font-size: 1.5em; cursor: pointer; padding: 5px 12px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+        #mobile-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 998; }
+
+        @media (max-width: 768px) {
+            .mobile-header { display: flex; }
+            .page-header { display: none; }
+            .container { margin: 20px 10px; padding: 20px; }
+            .main-layout { flex-direction: column; gap: 20px; }
+            .sidebar { position: fixed; top: 0; left: -320px; width: 280px; height: 100vh; max-height: 100vh; border-radius: 0; z-index: 999; transition: left 0.3s ease; border-left: none; border-right: 4px solid #84BD00; overflow-y: auto; }
+            .sidebar.open { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.3); }
+            #mobile-backdrop.open { display: block; }
+            .tab-button { flex: 1 1 calc(50% - 10px); text-align: center; font-size: 12px; padding: 10px; }
+        }
+
+        /* ========================================= */
+        /* INTERACTIVE EDIT MODE ADDITIONS           */
+        /* ========================================= */
+        .section[contenteditable="true"] { outline: 2px dashed #84BD00; padding: 20px; background: #fdfdfd; margin-top: 20px; border-radius: 4px; }
+        
+        .step-toolbar { position: absolute; top: 10px; right: 10px; display: none; gap: 8px; background: #fff; border: 1px solid #ddd; padding: 6px; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); flex-wrap: wrap; z-index: 10; align-items: center; max-width: 100%; box-sizing: border-box; }
+        .edit-mode-active .step-toolbar { display: flex; }
+        .tb-btn { background: #f0f0f0; border: 1px solid #ccc; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; color: #333; transition: 0.1s; }
+        .tb-btn:hover { background: #e0e0e0; }
+        .tb-btn.delete-step { color: #cc0000; }
+        .tb-btn.delete-step:hover { background: #ffe0e0; border-color: #cc0000; }
+
+        .formatting-toolbar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; padding: 10px; border-radius: 8px; display: none; gap: 10px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border: 1px solid #333; flex-wrap: wrap; justify-content: center; width: max-content; max-width: 90vw; }
+        .formatting-toolbar.active { display: flex; }
+        .formatting-toolbar button { background: #333; border: none; color: #fff; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; transition: 0.2s; }
+        .formatting-toolbar button:hover { background: #84BD00; color: #000; }
+
+        .edit-controls { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .edit-btn { background: #333; color: #fff; border: none; padding: 12px; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; transition: 0.2s; }
+        .edit-btn:hover { background: #84BD00; color: #000; }
+        .export-btn { background: #005a9c; color: #fff; }
+        .export-btn:hover { background: #004488; color: #fff; }
+        .export-btn.field-guide { background: #cc0000; }
+        .export-btn.field-guide:hover { background: #990000; color: #fff; }
+
+        .add-step-container { display: none; margin-bottom: 40px; text-align: center; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .edit-mode-active .add-step-container { display: flex !important; }
+        .add-btn { padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .add-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+
+<!-- Mobile Header (Visible only on small screens) -->
+<div class="mobile-header">
+    <button class="mobile-menu-btn" id="mobile-menu-toggle">☰</button>
+    <h2>TarusNC Guide</h2>
+    <div style="width: 38px;"></div> <!-- Spacer for flex balance -->
+</div>
+
+<!-- Mobile Backdrop -->
+<div id="mobile-backdrop"></div>
+
+<header class="page-header">
+    <h1 class="header-title">TarusNC Post-Processor Development Guide</h1>
+</header>
+
+<div class="container">
+    <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-nav" role="tablist">
+            <button class="tab-button" role="tab" aria-selected="true" aria-controls="panel-45-nutator" id="tab-45-nutator">45° Nutator (3+2)</button>
+            <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-90-nutator" id="tab-90-nutator">90° Nutator (3+2)</button>
+            <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-fork-head" id="tab-fork-head">5 Axis Fork Head</button>
+            <button class="tab-button" role="tab" aria-selected="false" aria-controls="panel-gundrill" id="tab-gundrill">Gundrill</button>
+        </nav>
+
+        <!-- ====================================================== -->
+        <!-- CONTENT FOR 45° NUTATOR (3+2) -->
+        <!-- ====================================================== -->
+        <article id="panel-45-nutator" class="tab-content" role="tabpanel" aria-labelledby="tab-45-nutator" aria-hidden="false">
+            <section class="section">
+                <h2>45° Nutator (3+2) Platform</h2>
+                <div class="info-box">
+                    <strong>Architecture Note:</strong> This machine is for <strong>3+2 (positional) 5-axis motion only</strong>. The A (tilt) and C (rotation) axes are used to position the tool, and then they <strong>clamp in place</strong> before any 3-axis (X, Y, Z) cutting motion begins. Applies to both Gantry and Moving Table configurations.
+                </div>
+            </section>
+
+            <div class="main-layout">
+                <nav class="sidebar">
+                    <h4>45° NUTATOR GUIDE</h4>
+                    <span class="category-label">I. OVERVIEW</span>
+                    <ul>
+                        <li><a href="#n45-1">1. Introduction</a></li>
+                        <li><a href="#n45-2">2. Core Programming Logic</a></li>
+                        <li><a href="#n45-3">3. File Structure & Format</a></li>
+                    </ul>
+                    <span class="category-label">II. KINEMATICS & TOOLING</span>
+                    <ul>
+                        <li><a href="#n45-4">4. 5-Axis Kinematics</a></li>
+                        <li><a href="#n45-5">5. Tooling & Compensation</a></li>
+                    </ul>
+                    <span class="category-label">III. REFERENCE</span>
+                    <ul>
+                        <li><a href="#n45-6">6. Supported G Codes</a></li>
+                        <li><a href="#n45-7">7. Supported M Codes</a></li>
+                        <li><a href="#n45-8">8. Example Programs</a></li>
+                        <li><a href="#n45-9">9. Filename Requirements</a></li>
+                    </ul>
+                </nav>
+
+                <div class="content-area">
+                    <section id="n45-1" class="section">
+                        <h2>1. Introduction</h2>
+                        <p>This guide provides the necessary technical specifications for developing a post-processor for the TarusNC control, specifically for a <strong>3+2 high-speed mill with a 45-degree nutator head</strong>.</p>
+                        
+                        <h3>Post-Processor Test Kit</h3>
+                        <p>To ensure a rapid and successful post-processor deployment, provide the CAM vendor or developer with a "Post-Processor Test Kit." This kit is typically a .zip file containing:</p>
+                        <ol>
+                            <li><strong>A simple 3D CAD model:</strong> A small test block or representative part with features relevant to the machine (e.g., angled holes, sloped surfaces).</li>
+                            <li><strong>A proven .NC program:</strong> A G-code file that has been verified to run successfully on the target machine to cut that exact CAD model.</li>
+                        </ol>
+                        <p>This allows the developer to program the part, generate code, and compare their output to a "known good" file, dramatically speeding up debugging.</p>
+                    </section>
+
+                    <section id="n45-2" class="section">
+                        <h2>2. Core Programming Logic</h2>
+                        
+                        <h3>3+2 and Five Axis Milling Overview</h3>
+                        <p>When 3-axis contour milling needs to be done with the tool "tipped" or tilted at an angle it is usually referred to as "3+2 milling". The toolpath program is made with the cutting tool tipped at an angle and then is <strong>held there</strong> until a surface or work piece has been machined (X Y & Z axis are continuously moving, but the <strong>A & C axis are stationary</strong>). Then the tool is tipped again at a different angle to machine another area of the part with a new toolpath program.</p>
+                        <p>This is an example of drilling holes with 3+2 Milling technique.</p>
+                        <img src="45-nutator-drilling.gif" alt="Animation of 45-degree Nutator Head drilling" class="manual-image">
+                        <p class="image-caption">Animation: 3+2 Milling - 45° Nutator Head stationary during cutting (45-nutator-drilling.gif)</p>
+
+                        <h3>Positioning Mode (Machine vs. Part)</h3>
+                        <p>The control operates in two primary coordinate modes. The post-processor must be configured to output code for the "Part Coordinate System" by default.</p>
+                        <ul>
+                            <li><strong>Part Coordinate System (<code>G54</code>-<code>G59</code>):</strong> This is the <strong>default mode for all G-code programs</strong>. All <code>X</code>, <code>Y</code>, and <code>Z</code> coordinates in a standard <code>G00</code> or <code>G01</code> block are interpreted as absolute positions relative to the active work offset (e.g., <code>G54</code>), which is set by the operator. The post-processor must output all motion in this "Part" coordinate system.</li>
+                            <li><strong>Machine Coordinate System (<code>G53</code>):</strong> This is the absolute machine position. Moves in this system (e.g., <code>N100 G53 G00 X...</code>) ignore all work offsets. This is only used for non-cutting moves, such as sending the machine to a safe home or tool change position.</li>
+                        </ul>
+
+                        <h3>Tool Length Compensation</h3>
+                        <p>The control <strong>automatically applies tool length compensation at all times</strong>. The length and radius values stored in the tool registry are made modal and active immediately upon a tool change (<code>M06 T#</code>). There is no separate G-code command to activate or deactivate tool length compensation.</p>
+
+                        <h3>3+2 Positional Motion (Crucial Safety Logic)</h3>
+                        <p>All 5-axis motion is <strong>positional (3+2) only</strong>. The post-processor <strong>must</strong> ensure all A/C axis rotations are non-cutting moves. The A and C axes will clamp before any subsequent <code>G01</code> cutting moves are executed.</p>
+                        <p>The post-processor must be configured to follow this exact sequence:</p>
+                        <ol>
+                            <li><strong>Retract:</strong> Retract the tool to a safe Z position (off the part surface).</li>
+                            <li><strong>Rotate:</strong> Output a <code>G00</code> rapid move containing the new <code>A</code> and <code>C</code> angles (e.g., <code>N100 G00 A45 C90</code>). The axes will move and clamp.</li>
+                            <li><strong>Reposition:</strong> Output a <code>G00</code> rapid move with the <code>X, Y, Z</code> coordinates for the start of the cut.</li>
+                            <li><strong>Engage:</strong> Output a <code>G01</code> feed move to the cutting depth.</li>
+                            <li><strong>Cut:</strong> Perform all 3-axis cutting motion.</li>
+                        </ol>
+                    </section>
+                    
+                    <section id="n45-3" class="section">
+                        <h2>3. File Structure & Program Format</h2>
+                        <ul>
+                            <li><strong>File Extension:</strong> <code>.NC</code> or <code>.CNC</code>.</li>
+                            <li><strong>Block Format:</strong> Each line must begin with an <code>N</code> number (e.g., <code>N100</code>).</li>
+                            <li><strong>One Code Per Line:</strong> G-codes and M-codes must be on their own individual lines. Do not group codes (e.g., <code>G01 G54</code> on one line is not supported).
+                                <p><em>Correct Example:</em></p>
+<pre><code>N100 G54
+N110 G00 X100 Y50 A0 C0</code></pre>
+                            </li>
+                            <li><strong>Modal Parameters:</strong> All parameters (<code>X</code>, <code>Y</code>, <code>Z</code>, <code>A</code>, <code>C</code>, <code>F</code>) are modal. However, output all active parameters on every motion line to avoid ambiguity and ensure correct debugging.</li>
+                            <li><strong>Comments:</strong> Comments are started with a semicolon (<code>;</code>), an asterisk (<code>*</code>), or enclosed in parentheses <code>( ... )</code>.</li>
+                        </ul>
+                    </section>
+
+                    <section id="n45-4" class="section">
+                        <h2>4. 5-Axis Kinematics (45° Nutator Head)</h2>
+                        <p>This is the most complex part of the post-processor. The control requires the post to calculate the final <code>A</code> (tilt) and <code>C</code> (rotation) angles based on the machine's 45-degree nutator head kinematics.</p>
+
+                        <h3>Machine Kinematics & Configuration</h3>
+                        <div class="warning-box">
+                            <strong>Developer Note:</strong> The values in this section are <strong>examples only and must not be hard-coded</strong>. X, Y, and Z axis travel limits are frequently customized per machine. The CAM developer must verify all travel limits and kinematic values for the specific target machine.
+                        </div>
+                        
+                        <h4>Axis Travel Limits (Hard Numbers)</h4>
+                        <ul>
+                            <li><strong>X, Y, Z Min/Max:</strong> (e.g., -1000mm / +1000mm) - <em>Note: These are always custom to the machine.</em></li>
+                            <li><strong>A Min/Max (Tilt):</strong> (e.g., -44.9950° / +44.9950°) - <em>Note: A-axis may not reach a full 45°.</em></li>
+                            <li><strong>C Min/Max (Rotation):</strong> (e.g., 0° / +360° or -180° / +180°)</li>
+                        </ul>
+                        <h4>Kinematic Configuration (Example)</h4>
+                        <p>The most critical kinematic value required by the post-processor is the "Flange Offset" (also known as "Pivot to Flange" or "Z in A"), which is the distance from the A-axis pivot point to the spindle mounting flange.</p>
+                        <ul>
+                            <li><strong>Flange Offset (Z in A):</strong> (e.g., 250mm)</li>
+                        </ul>
+
+                        <h3>Positional Coordinate Transformation (RTCP Logic)</h3>
+                        <p>When a toolpath is started, the move to the start of the program will automatically have the RTCP function active for positional moves. This is a <strong>point-to-point transformation</strong>, not continuous motion.</p>
+                        <p>When the post-processor outputs a <code>G00</code> block with a new 5-axis coordinate (e.g., <code>N100 G00 X10 Y10 Z5 A45 C90</code>), the control's RTCP feature calculates the necessary machine-axis positions for <code>X</code>, <code>Y</code>, and <code>Z</code> to get the tool tip to the <em>exact</em> <code>X10 Y10 Z5</code> part coordinate, based on the <em>new</em> <code>A45 C90</code> orientation.</p>
+                        <p><strong>YOU MUST HAVE THE GLOBAL SETTINGS SET TO "USE FILE ANGLES" FOR AUTOMATIC HEAD MOVEMENT TO TAKE PLACE DURING TOOLPATH EXECUTION.</strong></p>
+
+                        <h4>RTCP / Coordinate Output Clarification</h4>
+                        <p><strong>Crucial Note for Developers:</strong> All G-code programs must be posted with the final machine coordinates for X, Y, Z, A, and C. The post-processor must calculate the kinematic compensations for the head's pivot lengths. The TarusNC control's "RTCP" function (enabled by "Use File Angles") will then automatically apply the active tool length compensation.</p>
+
+                        <h3>Kinematic Logic (A & C "Virtual Angles")</h3>
+                        <p>The post must convert the CAM's tool vector (I, J, K) into the machine's <code>A</code> and <code>C</code> "Virtual Angles" based on the 45-degree head.</p>
+                        <p>The <code>C-Axis</code> rotation "points" the tool in a direction, and the <code>A-Axis</code> tilts the tool.</p>
+                        
+                        <img src="45-nutator-headdirections.jpeg" alt="Diagram of 45-degree Nutator Head virtual angles" class="manual-image">
+                        <p class="image-caption">Reference: 45° Nutator Head "Virtual Angle" Logic (45-nutator-headdirections.jpeg)</p>
+                        
+                        <p>The "Virtual Angle" logic for the C-axis with A axis at 45 Degrees is as follows:</p>
+                        <ul>
+                            <li><code>C=0</code> points the tool toward the machine's <strong>+X</strong> axis.</li>
+                            <li><code>C=90</code> points the tool toward the machine's <strong>+Y</strong> axis.</li>
+                            <li><code>C=180</code> points the tool toward the machine's <strong>-X</strong> axis.</li>
+                            <li><code>C=270</code> points the tool toward the machine's <strong>-Y</strong> axis.</li>
+                        </ul>
+                        
+                        <h3>Dual 5-Axis Modes</h3>
+                        <p>The post-processor commands 5-axis positions in two ways:</p>
+                        <ol>
+                            <li><strong>Standard 3+2 Motion (Primary):</strong> Outputting a <code>G00</code> or <code>G01</code> block with <code>A</code> and <code>C</code> angles (e.g., <code>N100 G01 X... Y... Z... A45 C90 F1000</code>). This is the standard method for all 3+2 surface milling.</li>
+                            <li><strong>Tarus Proprietary Cycles (Secondary):</strong> The control also has special "Tarus" canned cycles (e.g., <code>G482</code>, <code>G474</code>) that accept a 5-axis vector using <code>PI</code>, <code>PJ</code>, <code>PK</code> or <code>A,B,C</code> parameters. These are also positional cycles, primarily used for hole-making operations at an angle.</li>
+                        </ol>
+                    </section>
+
+                    <section id="n45-5" class="section">
+                        <h2>5. Tooling & Compensation Logic</h2>
+                        
+                        <h3>Tool Length and Presetting Tools</h3>
+                        <p>At the CNC control, the operator must set up his <strong>Tool Selector</strong> settings for a particular cutter with <strong>AT LEAST</strong> the following parameters:</p>
+                        <ul>
+                            <li><strong>Tool Length</strong> - To the Tip of Tool</li>
+                            <li><strong>Corner Radius</strong> - The Corner Radius of the ballnose/bullnose cutter.</li>
+                        </ul>
+                        <p>These settings apply to ALL Ballnose and Bullnose cutters. Flat Endmill cutters do not need the "Corner Radius" parameter set (Corner Radius = 0).</p>
+                        <p>There is NO Corner Radius parameter found in the Tool Manager for a <strong>Ballnose cutter</strong>. The CNC software allows for the <strong>radius</strong> of the ball automatically in the tool length parameter. A Flat Endmill will have a <strong>0 in the Corner Radius</strong> field if it has a sharp/square corner.</p>
+                        <p>Once the tool is installed in the spindle and the <strong>Tool Length</strong> has been calculated, the machine can be <strong>preset</strong> to the workpiece. For proper presetting technique see <strong>Ballnose Cutter Presetting</strong> for Ballnose type cutters, and <strong>Bullnose Cutter Presetting</strong> for Bullnose type of cutters.</p>
+                        <p>After presetting the tool is complete, the program can now be loaded into the CNC and <strong>executed</strong>.</p>
+
+                        <img src="millingoverview5axis.jpeg" alt="Diagram of Ballnose vs Bullnose cutter programming" class="manual-image">
+                        <p class="image-caption">Reference: "Ballnose Cutter" and "Bullnose Cutter" programming logic (millingoverview5axis.jpeg)</p>
+                        
+                        <p>Standard methods of programming for these types of cutters are:</p>
+                        <ul>
+                            <li><strong>Ballnose Cutters:</strong> Programmed & Preset to "Center of Ball"</li>
+                            <li><strong>Bullnose Cutters:</strong> Programmed & Preset to "Center of Radius"</li>
+                            <li><strong>Flat Endmill Cutters:</strong> Programmed & Preset to "Tip of Tool"</li>
+                        </ul>
+                    </section>
+
+                    <section id="n45-6" class="section">
+                        <h2>6. Supported G Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        
+                        <h3>Primary Motion & Settings</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G00</code></td><td>Rapid Point-to-Point</td><td><code>X, Y, Z, A, B, C</code> (End Points)</td></tr>
+                                <tr><td><code>G01</code></td><td>Linear Feed</td><td><code>X, Y, Z, A, B, C</code> (End Points), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G02</code></td><td>Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G03</code></td><td>Counter-Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G04</code></td><td>Pause / Dwell</td><td><code>P</code> (Time. e.g., <code>P1.5</code> for 1.5 seconds, <code>P1500</code> for 1.5 seconds)</td></tr>
+                                <tr><td><code>G20</code> / <code>G70</code></td><td>Units - Inch</td><td></td></tr>
+                                <tr><td><code>G21</code> / <code>G71</code></td><td>Units - Millimeter</td><td></td></tr>
+                                <tr><td><code>G40</code></td><td>Cutter Compensation Off</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G41</code></td><td>Cutter Compensation Left</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G42</code></td><td>Cutter Compensation Right</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G53</code></td><td>Machine Coordinate System</td><td></td></tr>
+                                <tr><td><code>G54</code> - <code>G58</code></td><td>Work Coordinate System 1-5</td><td></td></tr>
+                                <tr><td><code>G59</code></td><td>Work Coordinate System</td><td><code>P</code> (Coordinate system #)</td></tr>
+                                <tr><td><code>G460</code></td><td>Change Cut Style</td><td><code>P</code> (P1=Super Finish, P2=Finish, P3=Semi-Finish, P4=Semi, P5=Rough, P6=Drilling)</td></tr>
+                                <tr><td><code>G621</code>-<code>G626</code></td><td>Go to User Safe Position</td><td><code>F</code> (Feedrate). <code>G621</code> (X), <code>G622</code> (Y), <code>G623</code> (Z), <code>G624</code> (A), <code>G625</code> (B), <code>G626</code> (C)</td></tr>
+                                <tr><td><code>G631</code>-<code>G637</code></td><td>Clear Modal Position</td><td><code>G631</code> (X), <code>G632</code> (Y), <code>G633</code> (Z), <code>G634</code> (A), <code>G635</code> (B), <code>G636</code> (C), <code>G637</code> (All Axes)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Standard Canned Cycles (3-Axis)</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G33</code></td><td>Thread Mill</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>F</code> (Feed), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>D</code> (Diameter), <code>P</code> (Pitch), <code>T</code> (Taper), <code>C</code> (Passes), <code>LR</code> (Lead in/out)</td></tr>
+                                <tr><td><code>G74</code></td><td>Tapping - Left Handed</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G77</code>/<code>G78</code></td><td>Spot Face (CW/CCW)</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>I</code> (Inc. Depth), <code>J</code> (Inc. per Rev), <code>S</code> (Start Dia), <code>D</code> (End Dia), <code>RA</code> (Ramp Angle)</td></tr>
+                                <tr><td><code>G82</code>/<code>G83</code></td><td>Drill Cycle</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                                <tr><td><code>G84</code></td><td>Tapping - Right Handed</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G85</code>-<code>G89</code></td><td>Bore Cycles</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Tarus Proprietary 5-Axis Canned Cycles</h3>
+                        <p>These cycles perform 5-axis operations using either explicit <code>A/B/C</code> angles or a <code>PI/PJ/PK</code> vector.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Cycle</th>
+                                    <th>Vector-Based Code</th>
+                                    <th>Angle-Based Code</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><strong>Tarus Drilling</strong></td><td><code>G482</code> (Dwell On)<br><code>G483</code> (Dwell Off)</td><td><code>G582</code> (Dwell On)<br><code>G583</code> (Dwell Off)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Tapping</strong></td><td><code>G474</code> (Left)<br><code>G484</code> (Right)</td><td><code>G574</code> (Left)<br><code>G584</code> (Right)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>PT</code> (Pitch), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Boring</strong></td><td><code>G485</code>-<code>G489</code></td><td><code>G585</code>-<code>G589</code></td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Thread Mill</strong></td><td><code>G433</code></td><td><code>G533</code></td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Thread Dia), <code>PT</code> (Pitch), <code>TP</code> (Taper), <code>PS</code> (Passes), <code>LR</code> (Lead in/out), <code>CL</code> (Clearance), <code>RH</code> (Right/Left), <code>IT</code> (Int/Ext), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Spot Face</strong></td><td><code>G477</code> (CW)<br><code>G478</code> (CCW)</td><td><code>G577</code> (CW)<br><code>G578</code> (CCW)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>DE</code> (End Dia), <code>ID</code> (Depth Inc), <code>IR</code> (Radial Inc), <code>RA</code> (Ramp Angle), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section id="n45-7" class="section">
+                        <h2>7. Supported M Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>M00</code></td><td>Program Stop</td><td></td></tr>
+                                <tr><td><code>M01</code></td><td>Optional Stop / Program Pause</td><td>Displays comments on the same line (or following line) to the operator.</td></tr>
+                                <tr><td><code>M03</code></td><td>Spindle On - Clockwise (CW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M04</code></td><td>Spindle On - Counter-Clockwise (CCW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M05</code></td><td>Spindle Off</td><td></td></tr>
+                                <tr><td><code>M06</code></td><td>Tool Change</td><td><code>T</code> (Tool number from Tool Selector, e.g., <code>T1</code>)</td></tr>
+                                <tr><td><code>M07</code></td><td>Air On</td><td></td></tr>
+                                <tr><td><code>M08</code></td><td>Coolant On</td><td></td></tr>
+                                <tr><td><code>M09</code></td><td>Air and Coolant Off</td><td></td></tr>
+                                <tr><td><code>M30</code></td><td>Program End</td><td></td></tr>
+                                <tr><td><code>M52</code></td><td>Through Spindle Coolant On</td><td></td></tr>
+                                <tr><td><code>M53</code></td><td>Through Spindle Coolant Off</td><td></td></tr>
+                                <tr><td><code>M104</code></td><td>Tool Frame On</td><td><em>Note: <code>M104</code> is "Tool Frame On" and <code>M105</code> is "Tool Frame Off (part frame on)". This controls the coordinate system reference (Tool Center Point vs. Part). Given RTCP is always on, <code>M104</code> is the default for 5-axis.</em></td></tr>
+                                <tr><td><code>M105</code></td><td>Tool Frame Off (Part Frame On)</td><td><em>See note for <code>M104</code>.</em></td></tr>
+                                <tr><td><code>M106</code></td><td>Start Timer</td><td></td></tr>
+                                <tr><td><code>M107</code></td><td>Wait for Timer</td><td></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    
+                    <section id="n45-8" class="section">
+                        <h2>8. Example Programs</h2>
+                        
+                        <h3>Example Milling Program</h3>
+                        <p>Below is an example file that can be used to help structure the postprocessor for your CAD/CAM system so that it outputs the toolpaths correctly for the TarusNC CNC control:</p>
+<pre><code>N0001G71
+N0002(SAMPLE PROGRAM)
+N0003(TOOL NAME      : T BC D20)
+N0004(TOOL NUMBER    : 2)
+N0005M06 T2
+N0006(SPINDLE SPEED  : 5000)
+N0007M03 S5000
+N0008G00 X-6.4960 Y6.4320 Z150.0000 A0 C0
+N0009G00 X-6.4960 Y6.4320 Z137.1610 A0 C0
+N0010G01 X-6.4960 Y6.4320 Z132.1610 A0 C0 F12700
+N0011G01 X-6.6450 Y6.2180 Z132.1610 A0 C0 F12700
+N0012G01 X-7.0170 Y5.7760 Z132.1610 A0 C0 F12700
+...
+N4673G01 X-66.6270 Y71.1520 Z2.8390 A0 C0 F12700
+N4674G01 X-66.8750 Y71.0710 Z2.8390 A0 C0 F12700
+N4675G00 X-66.8750 Y71.0710 Z150.0000 A0 C0
+N4676M05
+N4677M30</code></pre>
+
+                        <h3>Example 5-Axis Drilling Program (G582/G637)</h3>
+                        <p>This example demonstrates using <code>G637</code> (Clear All Axes Modal) before a head rotation to ensure the <code>X</code>, <code>Y</code>, and <code>Z</code> axes are not modal. This is followed by a <code>G582</code> 5-axis angle-based drill cycle.</p>
+<pre><code>N0001(EXAMPLE 5-AXIS DRILLING)
+N0002M06 T5
+N0003(DRILL HOLES @ HEAD ANGLE A=45 C=0 DEGREES)
+N0004G603 (GO TO +Z MACHINE LIMIT)
+N0005G637 (CLEAR ALL AXES MODAL LOCATION)
+N0006G00 A45 C0
+N0007M03 S710 
+N0008G00 X-5 Y-6 Z10
+N0009G01 X-5 Y-6 Z5 F100
+N0010G582 CX-5 CY-6 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A45 C0
+N0011G582 CX-10 CY-8 CZ-3 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A45 C0 
+N0012G603 (GO TO +Z MACHINE LIMIT)
+N0013M05
+N0014(DRILL HOLES @ HEAD ANGLE A=22 C=90 DEGREES)
+N0015G637 (CLEAR ALL AXES MODAL LOCATION)
+N0016G00 A22 C90
+N0017M03 S710
+N0018G00 X7 Y5 Z10
+N0019G01 X7 Y5 Z5 F100
+N0020G582 CX7 CY5 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A22 C90
+N0021G603
+N0022M05
+N0023M30</code></pre>
+                    </section>
+
+                    <section id="n45-9" class="section">
+                        <h2>9. Filename and Directory Requirements</h2>
+                        <p>The post-processor must be configured to output filenames and directories that adhere to the following rules.</p>
+
+                        <h4>9.1. Naming Rules</h4>
+                        <ul>
+                            <li>Spaces or punctuation are not permitted. Use dashes (<code>-</code>) if necessary (e.g., <code>My-New-File.NC</code>).</li>
+                            <li>Filenames must be concise and descriptive.</li>
+                            <li>Filenames must be <code>lowercase</code>.</li>
+                            <li>Version numbers or dates are not permitted in filenames.</li>
+                        </ul>
+
+                        <h4>9.2. Illegal Filename Characters</h4>
+                        <p>The post-processor <strong>must not</strong> use any of the following characters or symbols in filenames or folders:</p>
+                        
+                        <div class="two-column-list">
+                            <div>
+                                <ul>
+                                    <li><code>#</code> (pound)</li>
+                                    <li><code>&amp;</code> (ampersand)</li>
+                                    <li><code>\</code> (back slash)</li>
+                                    <li><code>/</code> (forward slash)</li>
+                                    <li><code>*</code> (asterisk)</li>
+                                    <li><code>?</code> (question mark)</li>
+                                    <li>(blank spaces)</li>
+                                    <li><code>$</code> (dollar sign)</li>
+                                    <li><code>@</code> (at sign)</li>
+                                    <li><code>+</code> (plus sign)</li>
+                                    <li><code>|</code> (pipe)</li>
+                                    <li>emojis</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <ul>
+                                    <li><code>%</code> (percent)</li>
+                                    <li><code>{</code> (left curly bracket)</li>
+                                    <li><code>}</code> (right curly bracket)</li>
+                                    <li><code>&lt;</code> (left angle bracket)</li>
+                                    <li><code>&gt;</code> (right angle bracket)</li>
+                                    <li><code>!</code> (exclamation point)</li>
+                                    <li><code>'</code> (single quotes)</li>
+                                    <li><code>"</code> (double quotes)</li>
+                                    <li><code>:</code> (colon)</li>
+                                    <li><code>`</code> (backtick)</li>
+                                    <li><code>=</code> (equal sign)</li>
+                                    <li>alt codes</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </article>
+
+        <!-- ====================================================== -->
+        <!-- CONTENT FOR 90° NUTATOR -->
+        <!-- ====================================================== -->
+        <article id="panel-90-nutator" class="tab-content" role="tabpanel" tabindex="0" aria-labelledby="tab-90-nutator" aria-hidden="true">
+            <section class="section">
+                <h2>90° Nutator (3+2) Platform</h2>
+                <div class="info-box">
+                    <strong>Architecture Note:</strong> This machine is for <strong>3+2 (positional) 5-axis motion only</strong>. The A (tilt) and C (rotation) axes position the tool, then <strong>clamp in place</strong> before any 3-axis (X, Y, Z) cutting motion begins. Applies to both Gantry and Moving Table configurations.
+                </div>
+            </section>
+            
+            <div class="main-layout">
+                <nav class="sidebar">
+                    <h4>90° NUTATOR GUIDE</h4>
+                    <span class="category-label">I. OVERVIEW</span>
+                    <ul>
+                        <li><a href="#n90-1">1. Introduction</a></li>
+                        <li><a href="#n90-2">2. Core Programming Logic</a></li>
+                        <li><a href="#n90-3">3. File Structure & Format</a></li>
+                    </ul>
+                    <span class="category-label">II. KINEMATICS & TOOLING</span>
+                    <ul>
+                        <li><a href="#n90-4">4. 5-Axis Kinematics</a></li>
+                        <li><a href="#n90-5">5. Tooling & Compensation</a></li>
+                    </ul>
+                    <span class="category-label">III. REFERENCE</span>
+                    <ul>
+                        <li><a href="#n90-6">6. Supported G Codes</a></li>
+                        <li><a href="#n90-7">7. Supported M Codes</a></li>
+                        <li><a href="#n90-8">8. Example Programs</a></li>
+                        <li><a href="#n90-9">9. Filename Requirements</a></li>
+                    </ul>
+                </nav>
+
+                <div class="content-area">
+                    <section id="n90-1" class="section">
+                        <h2>1. Introduction</h2>
+                        <p>This guide provides specifications for a <strong>3+2 mill with a 90-degree nutator head</strong>. This machine is for <strong>3+2 (positional) 5-axis motion only</strong>.</p>
+
+                        <h3>Post-Processor Test Kit</h3>
+                        <p>To ensure a rapid and successful post-processor deployment, provide the CAM vendor or developer with a "Post-Processor Test Kit." This kit is typically a .zip file containing:</p>
+                        <ol>
+                            <li><strong>A simple 3D CAD model:</strong> A small test block or representative part with features relevant to the machine (e.g., angled holes, sloped surfaces).</li>
+                            <li><strong>A proven .NC program:</strong> A G-code file that has been verified to run successfully on the target machine to cut that exact CAD model.</li>
+                        </ol>
+                        <p>This allows the developer to program the part, generate code, and compare their output to a "known good" file, dramatically speeding up debugging.</p>
+                    </section>
+
+                    <section id="n90-2" class="section">
+                        <h2>2. Core Programming Logic</h2>
+                        
+                        <h3>3+2 and Five Axis Milling Overview</h3>
+                        <p>When 3-axis contour milling needs to be done with the tool "tipped" or tilted at an angle it is usually referred to as "3+2 milling". The toolpath program is made with the cutting tool tipped at an angle and then is <strong>held there</strong> until a surface or work piece has been machined (X Y & Z axis are continuously moving, but the <strong>A & C axis are stationary</strong>). Then the tool is tipped again at a different angle to machine another area of the part with a new toolpath program.</p>
+                        <p>This is an example of drilling holes with 3+2 Milling technique.</p>
+                        <img src="90-nutator-drilling.gif" alt="Animation of 90-degree Nutator Head drilling" class="manual-image">
+                        <p class="image-caption">Animation: 3+2 Milling - 90° Nutator Head stationary during cutting (90-nutator-drilling.gif)</p>
+                        
+                        <h3>Positioning Mode (Machine vs. Part)</h3>
+                        <p>The control operates in two primary coordinate modes. The post-processor must be configured to output code for the "Part Coordinate System" by default.</p>
+                        <ul>
+                            <li><strong>Part Coordinate System (<code>G54</code>-<code>G59</code>):</strong> This is the <strong>default mode for all G-code programs</strong>. All <code>X</code>, <code>Y</code>, and <code>Z</code> coordinates in a standard <code>G00</code> or <code>G01</code> block are interpreted as absolute positions relative to the active work offset (e.g., <code>G54</code>), which is set by the operator. The post-processor must output all motion in this "Part" coordinate system.</li>
+                            <li><strong>Machine Coordinate System (<code>G53</code>):</strong> This is the absolute machine position. Moves in this system (e.g., <code>N100 G53 G00 X...</code>) ignore all work offsets. This is only used for non-cutting moves, such as sending the machine to a safe home or tool change position.</li>
+                        </ul>
+
+                        <h3>Tool Length Compensation</h3>
+                        <p>The control <strong>automatically applies tool length compensation at all times</strong>. The length and radius values stored in the tool registry are made modal and active immediately upon a tool change (<code>M06 T#</code>). There is no separate G-code command to activate or deactivate tool length compensation.</p>
+
+                        <h3>3+2 Positional Motion (Crucial Safety Logic)</h3>
+                        <p>All 5-axis motion is <strong>positional (3+2) only</strong>. The post-processor <strong>must</strong> ensure all A/C axis rotations are non-cutting moves. The A and C axes will clamp before any subsequent <code>G01</code> cutting moves are executed.</p>
+                        <p>The post-processor must be configured to follow this exact sequence:</p>
+                        <ol>
+                            <li><strong>Retract:</strong> Retract the tool to a safe Z position (off the part surface).</li>
+                            <li><strong>Rotate:</strong> Output a <code>G00</code> rapid move containing the new <code>A</code> and <code>C</code> angles (e.g., <code>N100 G00 A90 C90</code>). The axes will move and clamp.</li>
+                            <li><strong>Reposition:</strong> Output a <code>G00</code> rapid move with the <code>X, Y, Z</code> coordinates for the start of the cut.</li>
+                            <li><strong>Engage:</strong> Output a <code>G01</code> feed move to the cutting depth.</li>
+                            <li><strong>Cut:</strong> Perform all 3-axis cutting motion.</li>
+                        </ol>
+                    </section>
+                    
+                    <section id="n90-3" class="section">
+                        <h2>3. File Structure & Program Format</h2>
+                        <ul>
+                            <li><strong>File Extension:</strong> <code>.NC</code> or <code>.CNC</code>.</li>
+                            <li><strong>Block Format:</strong> Each line must begin with an <code>N</code> number (e.g., <code>N100</code>).</li>
+                            <li><strong>One Code Per Line:</strong> G-codes and M-codes must be on their own individual lines. Do not group codes (e.g., <code>G01 G54</code> on one line is not supported).
+                                <p><em>Correct Example:</em></p>
+<pre><code>N100 G54
+N110 G00 X100 Y50 A0 C0</code></pre>
+                            </li>
+                            <li><strong>Modal Parameters:</strong> All parameters (<code>X</code>, <code>Y</code>, <code>Z</code>, <code>A</code>, <code>C</code>, <code>F</code>) are modal. However, output all active parameters on every motion line to avoid ambiguity and ensure correct debugging.</li>
+                            <li><strong>Comments:</strong> Comments are started with a semicolon (<code>;</code>), an asterisk (<code>*</code>), or enclosed in parentheses <code>( ... )</code>.</li>
+                        </ul>
+                    </section>
+
+                    <section id="n90-4" class="section">
+                        <h2>4. 5-Axis Kinematics (90° Nutator Head)</h2>
+                        <p>The primary difference for this machine is the kinematic calculation for the 90-degree head.</p>
+
+                        <h3>Machine Kinematics & Configuration</h3>
+                        <div class="warning-box">
+                            <strong>Developer Note:</strong> The values in this section are <strong>examples only and must not be hard-coded</strong>. X, Y, and Z axis travel limits are frequently customized per machine. The CAM developer must verify all travel limits and kinematic values for the specific target machine.
+                        </div>
+                        
+                        <h4>Axis Travel Limits (Hard Numbers)</h4>
+                        <ul>
+                            <li><strong>X, Y, Z Min/Max:</strong> (e.g., -1000mm / +1000mm) - <em>Note: These are always custom to the machine.</em></li>
+                            <li><strong>A Min/Max (Tilt):</strong> (e.g., -90° / +90°)</li>
+                            <li><strong>C Min/Max (Rotation):</strong> (e.g., 0° / +360° or -180° / +180°)</li>
+                        </ul>
+                        <h4>Kinematic Configuration (Example)</h4>
+                        <p>The most critical kinematic value required by the post-processor is the "Flange Offset" (also known as "Pivot to Flange" or "Z in A"), which is the distance from the A-axis pivot point to the spindle mounting flange.</p>
+                        <ul>
+                            <li><strong>Flange Offset (Z in A):</strong> (e.g., 250mm)</li>
+                        </ul>
+
+                        <h3>Positional Coordinate Transformation (RTCP Logic)</h3>
+                        <p>RTCP logic is identical to the 45° head. It is a <strong>point-to-point transformation</strong>, not continuous motion. When the post-processor outputs a <code>G00</code> block with a new 5-axis coordinate (e.g., <code>N100 G00 X10 Y10 Z5 A90 C90</code>), the control's RTCP feature calculates the necessary machine-axis positions for <code>X</code>, <code>Y</code>, and <code>Z</code> to get the tool tip to the <em>exact</em> <code>X10 Y10 Z5</code> part coordinate, based on the <em>new</em> <code>A90 C90</code> orientation.</p>
+                        <p><strong>YOU MUST HAVE THE GLOBAL SETTINGS SET TO "USE FILE ANGLES" FOR AUTOMATIC HEAD MOVEMENT TO TAKE PLACE DURING TOOLPATH EXECUTION.</strong></p>
+
+                        <h4>RTCP / Coordinate Output Clarification</h4>
+                        <p><strong>Crucial Note for Developers:</strong> All G-code programs must be posted with the final machine coordinates for X, Y, Z, A, and C. The post-processor must calculate the kinematic compensations for the head's pivot lengths. The TarusNC control's "RTCP" function (enabled by "Use File Angles") will then automatically apply the active tool length compensation.</p>
+
+                        <h3>Kinematic Logic (A & C "Virtual Angles")</h3>
+                        <p>The post must convert the CAM's tool vector (I, J, K) into the machine's <code>A</code> and <code>C</code> "Virtual Angles" based on the 90-degree head.</p>
+                        <p>The <code>C-Axis</code> rotation "points" the tool in a direction, and the <code>A-Axis</code> tilts the tool.</p>
+                        
+                        <img src="90-nutator-headdirections.jpeg" alt="Diagram of 90-degree Nutator Head virtual angles" class="manual-image">
+                        <p class="image-caption">Reference: 90° Nutator Head "Virtual Angle" Logic (90-nutator-headdirections.jpeg)</p>
+                        
+                        <p>The "Virtual Angle" logic for the C-axis is as follows:</p>
+                        <ul>
+                            <li><code>C=0</code> points the tool toward the machine's <strong>+X</strong> axis.</li>
+                            <li><code>C=90</code> points the tool toward the machine's <strong>-Y</strong> axis.</li>
+                            <li><code>C=180</code> points the tool toward the machine's <strong>-X</strong> axis.</li>
+                            <li><code>C=270</code> points the tool toward the machine's <strong>+Y</strong> axis.</li>
+                        </ul>
+
+                        <img src="image_ead045.jpg" alt="Diagram of Nutator Head A and C axis rotation direction" class="manual-image">
+                        <p class="image-caption">Reference: "A&C Axis Rotation Direction for 'Nutator' Style Head" diagram from Right_Hand_Rule.jpg</p>
+                        
+                        <h3>Dual 5-Axis Modes</h3>
+                        <p>The post-processor commands 5-axis positions in two ways:</p>
+                        <ol>
+                            <li><strong>Standard 3+2 Motion (Primary):</strong> Outputting a <code>G00</code> or <code>G01</code> block with <code>A</code> and <code>C</code> angles (e.g., <code>N100 G01 X... Y... Z... A90 C90 F1000</code>). This is the standard method for all 3+2 surface milling.</li>
+                            <li><strong>Tarus Proprietary Cycles (Secondary):</strong> The control also has special "Tarus" canned cycles (e.g., <code>G482</code>, <code>G474</code>) that accept a 5-axis vector using <code>PI</code>, <code>PJ</code>, <code>PK</code> or <code>A,B,C</code> parameters. These are also positional cycles, primarily used for hole-making operations at an angle.</li>
+                        </ol>
+                    </section>
+
+                    <section id="n90-5" class="section">
+                        <h2>5. Tooling & Compensation Logic</h2>
+                        
+                        <h3>Tool Length and Presetting Tools</h3>
+                        <p>At the CNC control, the operator must set up his <strong>Tool Selector</strong> settings for a particular cutter with <strong>AT LEAST</strong> the following parameters:</p>
+                        <ul>
+                            <li><strong>Tool Length</strong> - To the Tip of Tool</li>
+                            <li><strong>Corner Radius</strong> - The Corner Radius of the ballnose/bullnose cutter.</li>
+                        </ul>
+                        <p>These settings apply to ALL Ballnose and Bullnose cutters. Flat Endmill cutters do not need the "Corner Radius" parameter set (Corner Radius = 0).</p>
+                        <p>There is NO Corner Radius parameter found in the Tool Manager for a <strong>Ballnose cutter</strong>. The CNC software allows for the <strong>radius</strong> of the ball automatically in the tool length parameter. A Flat Endmill will have a <strong>0 in the Corner Radius</strong> field if it has a sharp/square corner.</p>
+                        <p>Once the tool is installed in the spindle and the <strong>Tool Length</strong> has been calculated, the machine can be <strong>preset</strong> to the workpiece. For proper presetting technique see <strong>Ballnose Cutter Presetting</strong> for Ballnose type cutters, and <strong>Bullnose Cutter Presetting</strong> for Bullnose type of cutters.</p>
+                        <p>After presetting the tool is complete, the program can now be loaded into the CNC and <strong>executed</strong>.</p>
+
+                        <img src="millingoverview5axis.jpeg" alt="Diagram of Ballnose vs Bullnose cutter programming" class="manual-image">
+                        <p class="image-caption">Reference: "Ballnose Cutter" and "Bullnose Cutter" programming logic (millingoverview5axis.jpeg)</p>
+                        
+                        <p>Standard methods of programming for these types of cutters are:</p>
+                        <ul>
+                            <li><strong>Ballnose Cutters:</strong> Programmed & Preset to "Center of Ball"</li>
+                            <li><strong>Bullnose Cutters:</strong> Programmed & Preset to "Center of Radius"</li>
+                            <li><strong>Flat Endmill Cutters:</strong> Programmed & Preset to "Tip of Tool"</li>
+                        </ul>
+                    </section>
+
+                    <section id="n90-6" class="section">
+                        <h2>6. Supported G Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        
+                        <h3>Primary Motion & Settings</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G00</code></td><td>Rapid Point-to-Point</td><td><code>X, Y, Z, A, B, C</code> (End Points)</td></tr>
+                                <tr><td><code>G01</code></td><td>Linear Feed</td><td><code>X, Y, Z, A, B, C</code> (End Points), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G02</code></td><td>Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G03</code></td><td>Counter-Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G04</code></td><td>Pause / Dwell</td><td><code>P</code> (Time. e.g., <code>P1.5</code> for 1.5 seconds, <code>P1500</code> for 1.5 seconds)</td></tr>
+                                <tr><td><code>G20</code> / <code>G70</code></td><td>Units - Inch</td><td></td></tr>
+                                <tr><td><code>G21</code> / <code>G71</code></td><td>Units - Millimeter</td><td></td></tr>
+                                <tr><td><code>G40</code></td><td>Cutter Compensation Off</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G41</code></td><td>Cutter Compensation Left</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G42</code></td><td>Cutter Compensation Right</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G53</code></td><td>Machine Coordinate System</td><td></td></tr>
+                                <tr><td><code>G54</code> - <code>G58</code></td><td>Work Coordinate System 1-5</td><td></td></tr>
+                                <tr><td><code>G59</code></td><td>Work Coordinate System</td><td><code>P</code> (Coordinate system #)</td></tr>
+                                <tr><td><code>G460</code></td><td>Change Cut Style</td><td><code>P</code> (P1=Super Finish, P2=Finish, P3=Semi-Finish, P4=Semi, P5=Rough, P6=Drilling)</td></tr>
+                                <tr><td><code>G621</code>-<code>G626</code></td><td>Go to User Safe Position</td><td><code>F</code> (Feedrate). <code>G621</code> (X), <code>G622</code> (Y), <code>G623</code> (Z), <code>G624</code> (A), <code>G625</code> (B), <code>G626</code> (C)</td></tr>
+                                <tr><td><code>G631</code>-<code>G637</code></td><td>Clear Modal Position</td><td><code>G631</code> (X), <code>G632</code> (Y), <code>G633</code> (Z), <code>G634</code> (A), <code>G635</code> (B), <code>G636</code> (C), <code>G637</code> (All Axes)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Standard Canned Cycles (3-Axis)</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G33</code></td><td>Thread Mill</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>F</code> (Feed), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>D</code> (Diameter), <code>P</code> (Pitch), <code>T</code> (Taper), <code>C</code> (Passes), <code>LR</code> (Lead in/out)</td></tr>
+                                <tr><td><code>G74</code></td><td>Tapping - Left Handed</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G77</code>/<code>G78</code></td><td>Spot Face (CW/CCW)</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>I</code> (Inc. Depth), <code>J</code> (Inc. per Rev), <code>S</code> (Start Dia), <code>D</code> (End Dia), <code>RA</code> (Ramp Angle)</td></tr>
+                                <tr><td><code>G82</code>/<code>G83</code></td><td>Drill Cycle</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                                <tr><td><code>G84</code></td><td>Tapping - Right Handed</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G85</code>-<code>G89</code></td><td>Bore Cycles</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Tarus Proprietary 5-Axis Canned Cycles</h3>
+                        <p>These cycles perform 5-axis operations using either explicit <code>A/B/C</code> angles or a <code>PI/PJ/PK</code> vector.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Cycle</th>
+                                    <th>Vector-Based Code</th>
+                                    <th>Angle-Based Code</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><strong>Tarus Drilling</strong></td><td><code>G482</code> (Dwell On)<br><code>G483</code> (Dwell Off)</td><td><code>G582</code> (Dwell On)<br><code>G583</code> (Dwell Off)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Tapping</strong></td><td><code>G474</code> (Left)<br><code>G484</code> (Right)</td><td><code>G574</code> (Left)<br><code>G584</code> (Right)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>PT</code> (Pitch), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Boring</strong></td><td><code>G485</code>-<code>G489</code></td><td><code>G585</code>-<code>G589</code></td><td><code>CX,CY,CZ</code> (Center), RECT (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Thread Mill</strong></td><td><code>G433</code></td><td><code>G533</code></td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Thread Dia), <code>PT</code> (Pitch), <code>TP</code> (Taper), <code>PS</code> (Passes), <code>LR</code> (Lead in/out), <code>CL</code> (Clearance), <code>RH</code> (Right/Left), <code>IT</code> (Int/Ext), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>B,C</code></td></tr>
+                                <tr><td><strong>Tarus Spot Face</strong></td><td><code>G477</code> (CW)<br><code>G478</code> (CCW)</td><td><code>G577</code> (CW)<br><code>G578</code> (CCW)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>DE</code> (End Dia), <code>ID</code> (Depth Inc), <code>IR</code> (Radial Inc), <code>RA</code> (Ramp Angle), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section id="n90-7" class="section">
+                        <h2>7. Supported M Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>M00</code></td><td>Program Stop</td><td></td></tr>
+                                <tr><td><code>M01</code></td><td>Optional Stop / Program Pause</td><td>Displays comments on the same line (or following line) to the operator.</td></tr>
+                                <tr><td><code>M03</code></td><td>Spindle On - Clockwise (CW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M04</code></td><td>Spindle On - Counter-Clockwise (CCW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M05</code></td><td>Spindle Off</td><td></td></tr>
+                                <tr><td><code>M06</code></td><td>Tool Change</td><td><code>T</code> (Tool number from Tool Selector, e.g., <code>T1</code>)</td></tr>
+                                <tr><td><code>M07</code></td><td>Air On</td><td></td></tr>
+                                <tr><td><code>M08</code></td><td>Coolant On</td><td></td></tr>
+                                <tr><td><code>M09</code></td><td>Air and Coolant Off</td><td></td></tr>
+                                <tr><td><code>M30</code></td><td>Program End</td><td></td></tr>
+                                <tr><td><code>M52</code></td><td>Through Spindle Coolant On</td><td></td></tr>
+                                <tr><td><code>M53</code></td><td>Through Spindle Coolant Off</td><td></td></tr>
+                                <tr><td><code>M104</code></td><td>Tool Frame On</td><td><em>Note: <code>M104</code> is "Tool Frame On" and <code>M105</code> is "Tool Frame Off (part frame on)". This controls the coordinate system reference (Tool Center Point vs. Part). Given RTCP is always on, <code>M104</code> is the default for 5-axis.</em></td></tr>
+                                <tr><td><code>M105</code></td><td>Tool Frame Off (Part Frame On)</td><td><em>See note for <code>M104</code>.</em></td></tr>
+                                <tr><td><code>M106</code></td><td>Start Timer</td><td></td></tr>
+                                <tr><td><code>M107</code></td><td>Wait for Timer</td><td></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    
+                    <section id="n90-8" class="section">
+                        <h2>8. Example Programs</h2>
+                        
+                        <h3>Example Milling Program</h3>
+                        <p>Below is an example file that can be used to help structure the postprocessor for your CAD/CAM system so that it outputs the toolpaths correctly for the TarusNC CNC control:</p>
+<pre><code>N0001G71
+N0002(SAMPLE PROGRAM)
+N0003(TOOL NAME      : T BC D20)
+N0004(TOOL NUMBER    : 2)
+N0005M06 T2
+N0006(SPINDLE SPEED  : 5000)
+N0007M03 S5000
+N0008G00 X-6.4960 Y6.4320 Z150.0000 A0 C0
+N0009G00 X-6.4960 Y6.4320 Z137.1610 A0 C0
+N0010G01 X-6.4960 Y6.4320 Z132.1610 A0 C0 F12700
+N0011G01 X-6.6450 Y6.2180 Z132.1610 A0 C0 F12700
+N0012G01 X-7.0170 Y5.7760 Z132.1610 A0 C0 F12700
+...
+N4673G01 X-66.6270 Y71.1520 Z2.8390 A0 C0 F12700
+N4674G01 X-66.8750 Y71.0710 Z2.8390 A0 C0 F12700
+N4675G00 X-66.8750 Y71.0710 Z150.0000 A0 C0
+N4676M05
+N4677M30</code></pre>
+
+                        <h3>Example 5-Axis Drilling Program (G582/G637)</h3>
+                        <p>This example demonstrates using <code>G637</code> (Clear All Axes Modal) before a head rotation to ensure the <code>X</code>, <code>Y</code>, and <code>Z</code> axes are not modal. This is followed by a <code>G582</code> 5-axis angle-based drill cycle.</p>
+<pre><code>N0001(EXAMPLE 5-AXIS DRILLING)
+N0002M06 T5
+N0003(DRILL HOLES @ HEAD ANGLE A=90 C=0 DEGREES)
+N0004G603 (GO TO +Z MACHINE LIMIT)
+N0005G637 (CLEAR ALL AXES MODAL LOCATION)
+N0006G00 A90 C0
+N0007M03 S710 
+N0008G00 X-5 Y-6 Z10
+N0009G01 X-5 Y-6 Z5 F100
+N0010G582 CX-5 CY-6 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A90 C0
+N0011G582 CX-10 CY-8 CZ-3 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A90 C0 
+N0012G603 (GO TO +Z MACHINE LIMIT)
+N0013M05
+N0014(DRILL HOLES @ HEAD ANGLE A=45 C=180 DEGREES)
+N0015G637 (CLEAR ALL AXES MODAL LOCATION)
+N0016G00 A45 C180
+N0017M03 S710
+N0018G00 X7 Y5 Z10
+N0019G01 X7 Y5 Z5 F100
+N0020G582 CX7 CY5 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A45 C180
+N0021G603
+N0022M05
+N0023M30</code></pre>
+                    </section>
+
+                    <section id="n90-9" class="section">
+                        <h2>9. Filename and Directory Requirements</h2>
+                        <p>The post-processor must be configured to output filenames and directories that adhere to the following rules.</p>
+
+                        <h4>9.1. Naming Rules</h4>
+                        <ul>
+                            <li>Spaces or punctuation are not permitted. Use dashes (<code>-</code>) if necessary (e.g., <code>My-New-File.NC</code>).</li>
+                            <li>Filenames must be concise and descriptive.</li>
+                            <li>Filenames must be <code>lowercase</code>.</li>
+                            <li>Version numbers or dates are not permitted in filenames.</li>
+                        </ul>
+
+                        <h4>9.2. Illegal Filename Characters</h4>
+                        <p>The post-processor <strong>must not</strong> use any of the following characters or symbols in filenames or folders:</p>
+                        
+                        <div class="two-column-list">
+                            <div>
+                                <ul>
+                                    <li><code>#</code> (pound)</li>
+                                    <li><code>&amp;</code> (ampersand)</li>
+                                    <li><code>\</code> (back slash)</li>
+                                    <li><code>/</code> (forward slash)</li>
+                                    <li><code>*</code> (asterisk)</li>
+                                    <li><code>?</code> (question mark)</li>
+                                    <li>(blank spaces)</li>
+                                    <li><code>$</code> (dollar sign)</li>
+                                    <li><code>@</code> (at sign)</li>
+                                    <li><code>+</code> (plus sign)</li>
+                                    <li><code>|</code> (pipe)</li>
+                                    <li>emojis</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <ul>
+                                    <li><code>%</code> (percent)</li>
+                                    <li><code>{</code> (left curly bracket)</li>
+                                    <li><code>}</code> (right curly bracket)</li>
+                                    <li><code>&lt;</code> (left angle bracket)</li>
+                                    <li><code>&gt;</code> (right angle bracket)</li>
+                                    <li><code>!</code> (exclamation point)</li>
+                                    <li><code>'</code> (single quotes)</li>
+                                    <li><code>"</code> (double quotes)</li>
+                                    <li><code>:</code> (colon)</li>
+                                    <li><code>`</code> (backtick)</li>
+                                    <li><code>=</code> (equal sign)</li>
+                                    <li>alt codes</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </article>
+
+        <!-- ====================================================== -->
+        <!-- CONTENT FOR 5 Axis Fork Head (A/C) -->
+        <!-- ====================================================== -->
+        <article id="panel-fork-head" class="tab-content" role="tabpanel" tabindex="0" aria-labelledby="tab-fork-head" aria-hidden="true">
+            <section class="section">
+                <h2>5 Axis Fork Head (A/C) Platform</h2>
+                <div class="info-box">
+                    <strong>Architecture Note:</strong> This machine type supports <strong>continuous 5-axis motion</strong>, where the <code>X</code>, <code>Y</code>, <code>Z</code>, <code>A</code>, and <code>C</code> axes can all move simultaneously to maintain tool orientation to the part surface.
+                </div>
+            </section>
+
+            <div class="main-layout">
+                <nav class="sidebar">
+                    <h4>FORK HEAD GUIDE</h4>
+                    <span class="category-label">I. OVERVIEW</span>
+                    <ul>
+                        <li><a href="#fh-1">1. Introduction</a></li>
+                        <li><a href="#fh-2">2. Core Programming Logic</a></li>
+                        <li><a href="#fh-3">3. File Structure & Format</a></li>
+                    </ul>
+                    <span class="category-label">II. KINEMATICS & TOOLING</span>
+                    <ul>
+                        <li><a href="#fh-4">4. 5-Axis Kinematics</a></li>
+                        <li><a href="#fh-5">5. Tooling & Compensation</a></li>
+                    </ul>
+                    <span class="category-label">III. REFERENCE</span>
+                    <ul>
+                        <li><a href="#fh-6">6. Supported G Codes</a></li>
+                        <li><a href="#fh-7">7. Supported M Codes</a></li>
+                        <li><a href="#fh-8">8. Example Programs</a></li>
+                        <li><a href="#fh-9">9. Filename Requirements</a></li>
+                    </ul>
+                </nav>
+
+                <div class="content-area">
+                    <section id="fh-1" class="section">
+                        <h2>1. Introduction</h2>
+                        <p>This guide provides specifications for a <strong>continuous 5-axis mill with a Fork-Style A/C Head</strong>. This information is based on the "3+2 & 5-Axis Milling Overview" and "Right Hand Rule" sections of this guide.</p>
+                        <p><em>Note: This guide applies to both Gantry and Moving Table machine configurations, as the head kinematics remain the same. Developers must verify specific machine travel limits (e.g., max Z for safe retracts) for the target machine.</em></p>
+
+                        <h3>Post-Processor Test Kit</h3>
+                        <p>To ensure a rapid and successful post-processor deployment, provide the CAM vendor or developer with a "Post-Processor Test Kit." This kit is typically a .zip file containing:</p>
+                        <ol>
+                            <li><strong>A simple 3D CAD model:</strong> A small test block or representative part with features relevant to the machine (e.g., angled holes, sloped surfaces).</li>
+                            <li><strong>A proven .NC program:</strong> A G-code file that has been verified to run successfully on the target machine to cut that exact CAD model.</li>
+                        </ol>
+                        <p>This allows the developer to program the part, generate code, and compare their output to a "known good" file, dramatically speeding up debugging.</p>
+                    </section>
+
+                    <section id="fh-2" class="section">
+                        <h2>2. Core Programming Logic</h2>
+                        
+                        <h3>Continuous 5-Axis Milling Overview</h3>
+                        <p>This is different than "3+2" milling. When performing 5 axis machining, the X Y Z A & C axes are <strong>continuously</strong> moving, positioning the tool relative to the surface it is machining.</p>
+                        <p>This is an example of continuous 5-Axis milling.</p>
+                        <img src="use-file-angles-1.gif" alt="Animation of continuous 5-axis milling" class="manual-image">
+                        <p class="image-caption">Animation: Continuous 5-Axis Milling (use-file-angles-1.gif)</p>
+                        <p>Careful programming with extensive collision control capabilities must be used when creating these types of toolpaths.</p>
+                        
+                        <h3>Positioning Mode (Machine vs. Part)</h3>
+                        <p>The control operates in two primary coordinate modes. The post-processor must be configured to output code for the "Part Coordinate System" by default.</p>
+                        <ul>
+                            <li><strong>Part Coordinate System (<code>G54</code>-<code>G59</code>):</strong> This is the <strong>default mode for all G-code programs</strong>. All <code>X</code>, <code>Y</code>, and <code>Z</code> coordinates in a standard <code>G00</code> or <code>G01</code> block are interpreted as absolute positions relative to the active work offset (e.g., <code>G54</code>), which is set by the operator. The post-processor must output all motion in this "Part" coordinate system.</li>
+                            <li><strong>Machine Coordinate System (<code>G53</code>):</strong> This is the absolute machine position. Moves in this system (e.g., <code>N100 G53 G00 X...</code>) ignore all work offsets. This is only used for non-cutting moves, such as sending the machine to a safe home or tool change position.</li>
+                        </ul>
+
+                        <h3>Tool Length Compensation</h3>
+                        <p>The control <strong>automatically applies tool length compensation at all times</strong>. The length and radius values stored in the tool registry are made modal and active immediately upon a tool change (<code>M06 T#</code>). There is no separate G-code command to activate or deactivate tool length compensation.</p>
+
+                        <h3>Continuous 5-Axis Motion (RTCP)</h3>
+                        <p>This machine type supports "full 5-Axis milling." The post-processor must output all 5 axes (<code>X, Y, Z, A, C</code>) and the feed rate (<code>F</code>) on the same <code>G01</code> block for all cutting moves.</p>
+                        <p>The RTCP function is active at all times during program execution and will manage the tool center point calculations automatically.</p>
+                    </section>
+                    
+                    <section id="fh-3" class="section">
+                        <h2>3. File Structure & Program Format</h2>
+                        <ul>
+                            <li><strong>File Extension:</strong> <code>.NC</code> or <code>.CNC</code>.</li>
+                            <li><strong>Block Format:</strong> Each line must begin with an <code>N</code> number (e.g., <code>N100</code>).</li>
+                            <li><strong>One Code Per Line:</strong> G-codes and M-codes must be on their own individual lines. Do not group codes (e.g., <code>G01 G54</code> on one line is not supported).
+                                <p><em>Correct Example:</em></p>
+<pre><code>N100 G54
+N110 G00 X100 Y50 A0 C0</code></pre>
+                            </li>
+                            <li><strong>Modal Parameters:</strong> All parameters (<code>X</code>, <code>Y</code>, <code>Z</code>, <code>A</code>, <code>C</code>, <code>F</code>) are modal. However, output all active parameters on every motion line to avoid ambiguity and ensure correct debugging.</li>
+                            <li><strong>Comments:</strong> Comments are started with a semicolon (<code>;</code>), an asterisk (<code>*</code>), or enclosed in parentheses <code>( ... )</code>.</li>
+                        </ul>
+                    </section>
+
+                    <section id="fh-4" class="section">
+                        <h2>4. 5-Axis Kinematics (A/C Fork Head)</h2>
+                        <p>The post-processor must output the *actual* <code>A</code> (tilt) and <code>C</code> (rotation) angles for this head configuration.</p>
+
+                        <h3>Machine Kinematics & Configuration</h3>
+                        <div class="warning-box">
+                            <strong>Developer Note:</strong> The values in this section are <strong>examples only and must not be hard-coded</strong>. X, Y, and Z axis travel limits are frequently customized per machine. The CAM developer must verify all travel limits and kinematic values for the specific target machine.
+                        </div>
+                        
+                        <h4>Axis Travel Limits (Hard Numbers)</h4>
+                        <ul>
+                            <li><strong>X, Y, Z Min/Max:</strong> (e.g., -1000mm / +1000mm) - <em>Note: These are always custom to the machine.</em></li>
+                            <li><strong>A Min/Max (Tilt):</strong> (e.g., -105° / +105°) - <em>Example only.</em></li>
+                            <li><strong>C Min/Max (Rotation):</strong> (e.g., -180° / +180° or 0° / +360°) - <em>Note: The C-axis range is determined by the physical hardware limits of the machine (e.g., casting, motors, or feedback devices).</em></li>
+                        </ul>
+                        <h4>Kinematic Chain (Pivot Lengths)</h4>
+                        <p>The post-processor must be built with the correct kinematic values for the machine's pivot points. These values must be verified from a machine-specific data sheet.</p>
+                        <ul>
+                            <li><strong>A-Axis Pivot Point (from machine zero):</strong> [X, Y, Z]</li>
+                            <li><strong>C-Axis Pivot Point (from A-axis pivot):</strong> [X, Y, Z]</li>
+                            <li><strong>Spindle Gauge Line (from C-axis pivot):</strong> [X, Y, Z]</li>
+                        </ul>
+
+                        <h3>What is RTCP?</h3>
+                        <p>RTCP = Rotation around Tool Center Point</p>
+                        <p>On Tarus 5-axis machines, this function is <strong>ON at all times</strong> (with the exception of Jogging the machine in which case the A & C axis will jog independently of X Y or Z axis moving). When a toolpath is started, the move to the start of the program will automatically have the RTCP function active.</p>
+                        <p><strong>YOU MUST HAVE THE GLOBAL SETTINGS SET TO “USE FILE ANGLES” FOR AUTOMATIC HEAD MOVEMENT TO TAKE PLACE DURING TOOLPATH EXECUTION.</strong></p>
+                        
+                        <h4>RTCP = ON</h4>
+                        <p>This is how the machine will move with RTCP = ON:</p>
+                        <img src="rtcp-1.gif" alt="RTCP ON Animation" class="manual-image">
+                        <img src="rtcp1.jpeg" alt="RTCP ON Diagram" class="manual-image">
+                        <p class="image-caption">"3+2” & continuous “5-axis” toolpaths created for 5-axis milling machines will automatically have the tool length and head rotations calculated by the CNC control during each move of an NC block.</p>
+
+                        <h4>RTCP / Coordinate Output Clarification</h4>
+                        <p><strong>Crucial Note for Developers:</strong> All G-code programs must be posted with the final machine coordinates for X, Y, Z, A, and C. The post-processor must calculate the kinematic compensations for the head's pivot lengths. The TarusNC control's "RTCP" function (enabled by "Use File Angles") will then automatically apply the active tool length compensation.</p>
+
+                        <h4>RTCP = OFF</h4>
+                        <p>This is how the machine will move with RTCP = OFF (e.g., when jogging):</p>
+                        <img src="rtcp-2.gif" alt="RTCP OFF Animation" class="manual-image">
+                        <img src="rtcp2.jpeg" alt="RTCP OFF Diagram" class="manual-image">
+
+                        <h3>Kinematic Logic (Standard A/C Head)</h3>
+                        <p>The post must calculate the <code>A</code> and <code>C</code> axis angles based on a standard fork head configuration and the "Right Hand Rule" principle.</p>
+                        
+                        <img src="image_ead045.jpg" alt="Diagram of Standard Head A and C axis rotation direction" class="manual-image">
+                        <p class="image-caption">Reference: "A&C Axis - Direction of Rotation for 'Standard' Head" diagram from Right_Hand_Rule.jpg</p>
+                        
+                        <p>The rotary axes are defined as:</p>
+                        <ul>
+                            <li><strong>A-Axis:</strong> Rotation around the X-axis.</li>
+                            <li><strong>C-Axis:</strong> Rotation around the Z-axis.</li>
+                        </ul>
+                    </section>
+
+                    <section id="fh-5" class="section">
+                        <h2>5. Tooling & Compensation Logic</h2>
+                        
+                        <h3>Tool Length and Presetting Tools</h3>
+                        <p>At the CNC control, the operator must set up his <strong>Tool Selector</strong> settings for a particular cutter with <strong>AT LEAST</strong> the following parameters:</p>
+                        <ul>
+                            <li><strong>Tool Length</strong> - To the Tip of Tool</li>
+                            <li><strong>Corner Radius</strong> - The Corner Radius of the ballnose/bullnose cutter.</li>
+                        </ul>
+                        <p>These settings apply to ALL Ballnose and Bullnose cutters. Flat Endmill cutters do not need the "Corner Radius" parameter set (Corner Radius = 0).</p>
+                        <p>There is NO Corner Radius parameter found in the Tool Manager for a <strong>Ballnose cutter</strong>. The CNC software allows for the <strong>radius</strong> of the ball automatically in the tool length parameter. A Flat Endmill will have a <strong>0 in the Corner Radius</strong> field if it has a sharp/square corner.</p>
+                        <p>Once the tool is installed in the spindle and the <strong>Tool Length</strong> has been calculated, the machine can be <strong>preset</strong> to the workpiece. For proper presetting technique see <strong>Ballnose Cutter Presetting</strong> for Ballnose type cutters, and <strong>Bullnose Cutter Presetting</strong> for Bullnose type of cutters.</p>
+                        <p>After presetting the tool is complete, the program can now be loaded into the CNC and <strong>executed</strong>.</p>
+
+                        <img src="millingoverview5axis.jpeg" alt="Diagram of Ballnose vs Bullnose cutter programming" class="manual-image">
+                        <p class="image-caption">Reference: "Ballnose Cutter" and "Bullnose Cutter" programming logic (millingoverview5axis.jpeg)</p>
+                        
+                        <p>Standard methods of programming for these types of cutters are:</p>
+                        <ul>
+                            <li><strong>Ballnose Cutters:</strong> Programmed & Preset to "Center of Ball"</li>
+                            <li><strong>Bullnose Cutters:</strong> Programmed & Preset to "Center of Radius"</li>
+                            <li><strong>Flat Endmill Cutters:</strong> Programmed & Preset to "Tip of Tool"</li>
+                        </ul>
+                    </section>
+
+                    <section id="fh-6" class="section">
+                        <h2>6. Supported G Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        
+                        <h3>Primary Motion & Settings</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G00</code></td><td>Rapid Point-to-Point</td><td><code>X, Y, Z, A, B, C</code> (End Points)</td></tr>
+                                <tr><td><code>G01</code></td><td>Linear Feed</td><td><code>X, Y, Z, A, B, C</code> (End Points), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G02</code></td><td>Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G03</code></td><td>Counter-Clockwise Circle</td><td><code>X, Y, Z</code> (End Points), <code>I, J</code> (Incremental Center), <code>F</code> (Feedrate)</td></tr>
+                                <tr><td><code>G04</code></td><td>Pause / Dwell</td><td><code>P</code> (Time. e.g., <code>P1.5</code> for 1.5 seconds, <code>P1500</code> for 1.5 seconds)</td></tr>
+                                <tr><td><code>G20</code> / <code>G70</code></td><td>Units - Inch</td><td></td></tr>
+                                <tr><td><code>G21</code> / <code>G71</code></td><td>Units - Millimeter</td><td></td></tr>
+                                <tr><td><code>G40</code></td><td>Cutter Compensation Off</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G41</code></td><td>Cutter Compensation Left</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G42</code></td><td>Cutter Compensation Right</td><td><em>Must be on its own line</em></td></tr>
+                                <tr><td><code>G53</code></td><td>Machine Coordinate System</td><td></td></tr>
+                                <tr><td><code>G54</code> - <code>G58</code></td><td>Work Coordinate System 1-5</td><td></td></tr>
+                                <tr><td><code>G59</code></td><td>Work Coordinate System</td><td><code>P</code> (Coordinate system #)</td></tr>
+                                <tr><td><code>G460</code></td><td>Change Cut Style</td><td><code>P</code> (P1=Super Finish, P2=Finish, P3=Semi-Finish, P4=Semi, P5=Rough, P6=Drilling)</td></tr>
+                                <tr><td><code>G621</code>-<code>G626</code></td><td>Go to User Safe Position</td><td><code>F</code> (Feedrate). <code>G621</code> (X), <code>G622</code> (Y), <code>G623</code> (Z), <code>G624</code> (A), <code>G625</code> (B), <code>G626</code> (C)</td></tr>
+                                <tr><td><code>G631</code>-<code>G637</code></td><td>Clear Modal Position</td><td><code>G631</code> (X), <code>G632</code> (Y), <code>G633</code> (Z), <code>G634</code> (A), <code>G635</code> (B), <code>G636</code> (C), <code>G637</code> (All Axes)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Standard Canned Cycles (3-Axis)</h3>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>G33</code></td><td>Thread Mill</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>F</code> (Feed), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>D</code> (Diameter), <code>P</code> (Pitch), <code>T</code> (Taper), <code>C</code> (Passes), <code>LR</code> (Lead in/out)</td></tr>
+                                <tr><td><code>G74</code></td><td>Tapping - Left Handed</td><td><code>X</code> (Center), C (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G77</code>/<code>G78</code></td><td>Spot Face (CW/CCW)</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>I</code> (Inc. Depth), <code>J</code> (Inc. per Rev), <code>S</code> (Start Dia), <code>D</code> (End Dia), <code>RA</code> (Ramp Angle)</td></tr>
+                                <tr><td><code>G82</code>/<code>G83</code></td><td>Drill Cycle</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                                <tr><td><code>G84</code></td><td>Tapping - Right Handed</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td></tr>
+                                <tr><td><code>G85</code>-<code>G89</code></td><td>Bore Cycles</td><td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>F</code> (Feed), <code>J</code> (Initial Peck), <code>P</code> (Peck %), <code>I</code> (Chip Break), <code>H</code> (Dwell)</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h3>Tarus Proprietary 5-Axis Canned Cycles</h3>
+                        <p>These cycles perform 5-axis operations using either explicit <code>A/B/C</code> angles or a <code>PI/PJ/PK</code> vector.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Cycle</th>
+                                    <th>Vector-Based Code</th>
+                                    <th>Angle-Based Code</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><strong>Tarus Drilling</strong></td><td><code>G482</code> (Dwell On)<br><code>G483</code> (Dwell Off)</td><td><code>G582</code> (Dwell On)<br><code>G583</code> (Dwell Off)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Tapping</strong></td><td><code>G474</code> (Left)<br><code>G484</code> (Right)</td><td><code>G574</code> (Left)<br><code>G584</code> (Right)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>PT</code> (Pitch), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Boring</strong></td><td><code>G485</code>-<code>G489</code></td><td><code>G585</code>-<code>G589</code></td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>IP</code> (Initial Peck), <code>PP</code> (Peck %), <code>CB</code> (Chip Break), <code>DT</code> (Dwell), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Thread Mill</strong></td><td><code>G433</code></td><td><code>G533</code></td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Thread Dia), <code>PT</code> (Pitch), <code>TP</code> (Taper), <code>PS</code> (Passes), <code>LR</code> (Lead in/out), <code>CL</code> (Clearance), <code>RH</code> (Right/Left), <code>IT</code> (Int/Ext), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                                <tr><td><strong>Tarus Spot Face</strong></td><td><code>G477</code> (CW)<br><code>G478</code> (CCW)</td><td><code>G577</code> (CW)<br><code>G578</code> (CCW)</td><td><code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>DE</code> (End Dia), <code>ID</code> (Depth Inc), <code>IR</code> (Radial Inc), <code>RA</code> (Ramp Angle), <code>F</code> (Feed), plus <code>PI,PJ,PK</code> or <code>A,B,C</code></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section id="fh-7" class="section">
+                        <h2>7. Supported M Codes (Milling Only)</h2>
+                        <p>This list excludes all Gundrill-specific codes.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>M00</code></td><td>Program Stop</td><td></td></tr>
+                                <tr><td><code>M01</code></td><td>Optional Stop / Program Pause</td><td>Displays comments on the same line (or following line) to the operator.</td></tr>
+                                <tr><td><code>M03</code></td><td>Spindle On - Clockwise (CW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M04</code></td><td>Spindle On - Counter-Clockwise (CCW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M05</code></td><td>Spindle Off</td><td></td></tr>
+                                <tr><td><code>M06</code></td><td>Tool Change</td><td><code>T</code> (Tool number from Tool Selector, e.g., <code>T1</code>)</td></tr>
+                                <tr><td><code>M07</code></td><td>Air On</td><td></td></tr>
+                                <tr><td><code>M08</code></td><td>Coolant On</td><td></td></tr>
+                                <tr><td><code>M09</code></td><td>Air and Coolant Off</td><td></td></tr>
+                                <tr><td><code>M30</code></td><td>Program End</td><td></td></tr>
+                                <tr><td><code>M52</code></td><td>Through Spindle Coolant On</td><td></td></tr>
+                                <tr><td><code>M53</code></td><td>Through Spindle Coolant Off</td><td></td></tr>
+                                <tr><td><code>M104</code></td><td>Tool Frame On</td><td><em>Note: <code>M104</code> is "Tool Frame On" and <code>M105</code> is "Tool Frame Off (part frame on)". This controls the coordinate system reference (Tool Center Point vs. Part). Given RTCP is always on, <code>M104</code> is the default for 5-axis.</em></td></tr>
+                                <tr><td><code>M105</code></td><td>Tool Frame Off (Part Frame On)</td><td><em>See note for <code>M104</code>.</em></td></tr>
+                                <tr><td><code>M106</code></td><td>Start Timer</td><td></td></tr>
+                                <tr><td><code>M107</code></td><td>Wait for Timer</td><td></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    
+                    <section id="fh-8" class="section">
+                        <h2>8. Example Programs</h2>
+                        
+                        <h3>Example Milling Program</h3>
+                        <p>Below is an example file that can be used to help structure the postprocessor for your CAD/CAM system so that it outputs the toolpaths correctly for the TarusNC CNC control:</p>
+<pre><code>N0001G71
+N0002(SAMPLE PROGRAM)
+N0003(TOOL NAME      : T BC D20)
+N0004(TOOL NUMBER    : 2)
+N0005M06 T2
+N0006(SPINDLE SPEED  : 5000)
+N0007M03 S5000
+N0008G00 X-6.4960 Y6.4320 Z150.0000 A0 C0
+N0009G00 X-6.4960 Y6.4320 Z137.1610 A0 C0
+N0010G01 X-6.4960 Y6.4320 Z132.1610 A0 C0 F12700
+N0011G01 X-6.6450 Y6.2180 Z132.1610 A0 C0 F12700
+N0012G01 X-7.0170 Y5.7760 Z132.1610 A0 C0 F12700
+...
+N4673G01 X-66.6270 Y71.1520 Z2.8390 A0 C0 F12700
+N4674G01 X-66.8750 Y71.0710 Z2.8390 A0 C0 F12700
+N4675G00 X-66.8750 Y71.0710 Z150.0000 A0 C0
+N4676M05
+N4677M30</code></pre>
+
+                        <h3>Example 5-Axis Drilling Program (G582/G637)</h3>
+                        <p>This example demonstrates using <code>G637</code> (Clear All Axes Modal) before a head rotation to ensure the <code>X</code>, <code>Y</code>, and <code>Z</code> axes are not modal. This is followed by a <code>G582</code> 5-axis angle-based drill cycle.</p>
+<pre><code>N0001(EXAMPLE 5-AXIS DRILLING)
+N0002M06 T5
+N0003(DRILL HOLES @ HEAD ANGLE A=-30 C=45 DEGREES)
+N0004G603 (GO TO +Z MACHINE LIMIT)
+N0005G637 (CLEAR ALL AXES MODAL LOCATION)
+N0006G00 A-30 C45
+N0007M03 S710 
+N0008G00 X-5 Y-6 Z10
+N0009G01 X-5 Y-6 Z5 F100
+N0010G582 CX-5 CY-6 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A-30 C45
+N0011G582 CX-10 CY-8 CZ-3 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A-30 C45 
+N0012G603 (GO TO +Z MACHINE LIMIT)
+N0013M05
+N0014(DRILL HOLES @ HEAD ANGLE A=-15 C=135 DEGREES)
+N0015G637 (CLEAR ALL AXES MODAL LOCATION)
+N0016G00 A-15 C135
+N0017M03 S710
+N0018G00 X7 Y5 Z10
+N0019G01 X7 Y5 Z5 F100
+N0020G582 CX7 CY5 CZ0 RT7.0 DP0.500 IP0 PP100 CB0 DT0 F4.1 A-15 C135
+N0021G603
+N0022M05
+N0023M30</code></pre>
+                    </section>
+
+                    <section id="fh-9" class="section">
+                        <h2>9. Filename and Directory Requirements</h2>
+                        <p>The post-processor must be configured to output filenames and directories that adhere to the following rules.</p>
+
+                        <h4>9.1. Naming Rules</h4>
+                        <ul>
+                            <li>Spaces or punctuation are not permitted. Use dashes (<code>-</code>) if necessary (e.g., <code>My-New-File.NC</code>).</li>
+                            <li>Filenames must be concise and descriptive.</li>
+                            <li>Filenames must be <code>lowercase</code>.</li>
+                            <li>Version numbers or dates are not permitted in filenames.</li>
+                        </ul>
+
+                        <h4>9.2. Illegal Filename Characters</h4>
+                        <p>The post-processor <strong>must not</strong> use any of the following characters or symbols in filenames or folders:</p>
+                        
+                        <div class="two-column-list">
+                            <div>
+                                <ul>
+                                    <li><code>#</code> (pound)</li>
+                                    <li><code>&amp;</code> (ampersand)</li>
+                                    <li><code>\</code> (back slash)</li>
+                                    <li><code>/</code> (forward slash)</li>
+                                    <li><code>*</code> (asterisk)</li>
+                                    <li><code>?</code> (question mark)</li>
+                                    <li>(blank spaces)</li>
+                                    <li><code>$</code> (dollar sign)</li>
+                                    <li><code>@</code> (at sign)</li>
+                                    <li><code>+</code> (plus sign)</li>
+                                    <li><code>|</code> (pipe)</li>
+                                    <li>emojis</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <ul>
+                                    <li><code>%</code> (percent)</li>
+                                    <li><code>{</code> (left curly bracket)</li>
+                                    <li><code>}</code> (right curly bracket)</li>
+                                    <li><code>&lt;</code> (left angle bracket)</li>
+                                    <li><code>&gt;</code> (right angle bracket)</li>
+                                    <li><code>!</code> (exclamation point)</li>
+                                    <li><code>'</code> (single quotes)</li>
+                                    <li><code>"</code> (double quotes)</li>
+                                    <li><code>:</code> (colon)</li>
+                                    <li><code>`</code> (backtick)</li>
+                                    <li><code>=</code> (equal sign)</li>
+                                    <li>alt codes</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </article>
+
+        <!-- ====================================================== -->
+        <!-- CONTENT FOR GUNDRILL (All Types) -->
+        <!-- ====================================================== -->
+        <article id="panel-gundrill" class="tab-content" role="tabpanel" tabindex="0" aria-labelledby="tab-gundrill" aria-hidden="true">
+            <section class="section">
+                <h2>Gundrill (All Types) Platform</h2>
+                <div class="info-box">
+                    <strong>Architecture Note:</strong> This guide provides specifications for developing a post-processor for <strong>TarusNC Gundrill machines</strong>. This covers 3-Axis (XYZ Drill), 4-Axis (XYZ Drill + B-Axis Rotary Table), and 5/6-Axis (XYZ Drill + A-Axis Tilt + B-Axis Rotary Table).
+                </div>
+            </section>
+            
+            <div class="main-layout">
+                <nav class="sidebar">
+                    <h4>GUNDRILL GUIDE</h4>
+                    <span class="category-label">I. OVERVIEW</span>
+                    <ul>
+                        <li><a href="#gd-1">1. Introduction</a></li>
+                        <li><a href="#gd-2">2. Core Programming Logic</a></li>
+                        <li><a href="#gd-3">3. File Structure & Format</a></li>
+                    </ul>
+                    <span class="category-label">II. KINEMATICS & CYCLES</span>
+                    <ul>
+                        <li><a href="#gd-4">4. Gundrill Kinematics</a></li>
+                        <li><a href="#gd-5">5. Gundrill Cycles</a></li>
+                    </ul>
+                    <span class="category-label">III. REFERENCE</span>
+                    <ul>
+                        <li><a href="#gd-6">6. Supported G Codes</a></li>
+                        <li><a href="#gd-7">7. Supported M Codes</a></li>
+                        <li><a href="#gd-8">8. Example Programs</a></li>
+                        <li><a href="#gd-9">9. Filename Requirements</a></li>
+                    </ul>
+                </nav>
+
+                <div class="content-area">
+                    <section id="gd-1" class="section">
+                        <h2>1. Introduction</h2>
+                        <p>This guide provides specifications for developing a post-processor for <strong>TarusNC Gundrill machines</strong>. This guide covers all common machine configurations:</p>
+                        <ul>
+                            <li><strong>3-Axis Gundrills (XYZ Drill)</strong></li>
+                            <li><strong>4-Axis Gundrills (XYZ Drill + B-Axis Rotary Table)</strong></li>
+                            <li><strong>5/6-Axis Gundrills (XYZ Drill + A-Axis Tilt + B-Axis Rotary Table)</strong></li>
+                        </ul>
+
+                        <h3>Post-Processor Test Kit</h3>
+                        <p>To ensure a rapid and successful post-processor deployment, provide the CAM vendor or developer with a "Post-Processor Test Kit." This kit is typically a .zip file containing:</p>
+                        <ol>
+                            <li><strong>A simple 3D CAD model:</strong> A small test block or representative part with features relevant to the machine (e.g., angled holes, sloped surfaces).</li>
+                            <li><strong>A proven .NC program:</strong> A G-code file that has been verified to run successfully on the target machine to cut that exact CAD model.</li>
+                        </ol>
+                        <p>This allows the developer to program the part, generate code, and compare their output to a "known good" file, dramatically speeding up debugging.</p>
+                    </section>
+
+                    <section id="gd-2" class="section">
+                        <h2>2. Core Programming Logic</h2>
+                        
+                        <h3>Gundrill Cycle Logic</h3>
+                        <p>Gundrill programs are structured differently from milling programs. A program consists of a main cycle call (e.g., <code>G81</code>, <code>G581</code>) followed by one or more depth commands (<code>G801</code>, <code>G802</code>), and finally an end cycle command (<code>G80</code>).</p>
+                        <p>Parameters must be set to "From File" (defined in the G-code).</p>
+                        
+                        <h3>Positioning Mode (Machine vs. Part)</h3>
+                        <p>The control operates in two primary coordinate modes. The post-processor must be configured to output code for the "Part Coordinate System" by default.</p>
+                        <ul>
+                            <li><strong>Part Coordinate System (<code>G54</code>-<code>G59</code>):</strong> This is the <strong>default mode for all G-code programs</strong>. All <code>X</code>, <code>Y</code>, and <code>Z</code> coordinates are interpreted as absolute positions relative to the active work offset (e.g., <code>G54</code>).</li>
+                            <li><strong>Machine Coordinate System (<code>G53</code>):</strong> This is the absolute machine position. Moves in this system (e.g., <code>N100 G53 G00 X...</code>) ignore all work offsets.</li>
+                        </ul>
+
+                        <h3>Gundrill Tool Change (<code>M16</code>)</h3>
+                        <p>Gundrill machines use <code>M16 T#</code> for a tool change, not <code>M06</code>.</p>
+
+                        <h3>Positional 4/5/6-Axis Motion (Crucial Safety Logic)</h3>
+                        <p>The post-processor <strong>must</strong> ensure all A and B axis rotations are non-cutting moves.</p>
+                        <p>The post-processor must be configured to follow this exact sequence:</p>
+                        <ol>
+                            <li><strong>Retract:</strong> Retract the tool to a safe Z position (off the part surface).</li>
+                            <li><strong>Rotate:</strong> Output a <code>G00</code> rapid move containing the new <code>A</code> and <code>B</code> angles (e.g., <code>N100 G00 A-10 B90</code>).</li>
+                            <li><strong>Reposition & Start Cycle:</strong> Output the <code>G581</code> cycle, which contains the <code>X,Y,Z</code> start position and the active <code>A</code> and <code>B</code> angles (e.g., <code>N110 G581 CX... CY... CZ... A-10 B90 ...</code>).</li>
+                        </ol>
+                        
+                        <h3>Gundrill Tool Parameters</h3>
+                        <p>These parameters must be correctly set for each drill and material type:</p>
+                        <ul>
+                            <li><strong>DPR (Depth Per Revolution):</strong> The distance the Drill axis moves per revolution of the Spindle.</li>
+                            <li><strong>RPM (Revolutions Per Minute):</strong> This is how many times the spindle rotates in one minute (Spindle RPM's).</li>
+                            <li><strong>Spindle Load:</strong> This is displayed as a percentage (%) of the maximum load (motor current) the spindle motor is capable of. This is used as a maximum value. If it exceeds this value when drilling, the control will abort the cycle.</li>
+                            <li><strong>Drive Load:</strong> This is displayed as a percentage (%) of the maximum load (drive current) the Drill axis servo drive is capable of. It is set as a maximum value. If it exceeds this value when drilling, it will abort the cycle.</li>
+                            <li><strong>Oil Pressure:</strong> This is displayed as a percentage (%) of the maximum oil pressure this particular drill should have. It is set as a maximum value. If it exceeds this value when drilling, the control will abort the cycle.</li>
+                            <li><strong>Flow Rate:</strong> This is the flow rate of the gundrill oil (Gallons/Min usually) for the tool while it is drilling.</li>
+                            <li><strong>Total Drilled:</strong> This is the total (distance) amount drilled for this particular drill since the last time it was reset.</li>
+                        </ul>
+                        <p><em>NOTE: All of these parameter settings must be set up for each “drill zone” (Initial, Normal and Crossline) for each drill and material type.</em></p>
+                    </section>
+                    
+                    <section id="gd-3" class="section">
+                        <h2>3. File Structure & Program Format</h2>
+                        <ul>
+                            <li><strong>File Extension:</strong> <code>.NC</code> or <code>.CNC</code>.</li>
+                            <li><strong>Block Format:</strong> Each line must begin with an <code>N</code> number (e.g., <code>N100</code>).</li>
+                            <li><strong>One Code Per Line:</strong> G-codes and M-codes must be on their own individual lines. Do not group codes (e.g., <code>G01 G54</code> on one line is not supported).</li>
+                            <li><strong>Comments:</strong> Comments are started with a semicolon (<code>;</code>), an asterisk (<code>*</code>), or enclosed in parentheses <code>( ... )</code>.</li>
+                        </ul>
+                    </section>
+
+                    <section id="gd-4" class="section">
+                        <h2>4. Gundrill Kinematics & Offsets</h2>
+                        <div class="warning-box">
+                            <strong>Crucial Note for Developers:</strong> The TarusNC control automatically handles all kinematic offsets. The post-processor <strong>does not</strong> need to calculate or output any compensation for the machine's geometry (e.g., spindle-to-spindle distance, pivot points, or rotary table center).
+                        </div>
+                        <p>The post-processor should only output the final X, Y, Z, A, and B coordinates relative to the active work offset (e.g., <code>G54</code>). The control handles all necessary transformations.</p>
+                        <p>The offset values listed below are for developer awareness only, as they are part of the machine's core configuration. These values are calibrated on the machine and used internally by the control.</p>
+
+                        <h4>Machine Configuration Reference (Handled by Control)</h4>
+                        <p>On Gundrill machines equipped with an Auxiliary Spindle, the <strong>Auxiliary Spindle is the primary reference point</strong> for all kinematic offsets. The control automatically applies these offsets when a tool change is commanded.</p>
+                        <ul>
+                            <li><strong>Gundrill Spindle Offset (from Aux):</strong> (e.g., X=12.500", Y=0.400", Z=1.500")</li>
+                            <li><strong>Tilt-Axis Pivot:</strong> This is measured from the tilt-axis pivot point to the <strong>face of the Auxiliary spindle</strong>.</li>
+                            <li><strong>Rotary Table Center:</strong> For machines with a B-axis rotary table, a calibrated center value is collected during machine installation.</li>
+                        </ul>
+                    </section>
+
+                    <section id="gd-5" class="section">
+                        <h2>5. Gundrill Cycles</h2>
+                        <p>The post must select the correct gundrill cycle based on the machine's axes.</p>
+                        <ul>
+                            <li><strong>3-Axis (XYZ):</strong> Use <code>G81</code>. This cycle uses <code>CX, CY, CZ</code> for the hole start position.</li>
+                            <li><strong>4-Axis (XYZ + B-Rotary):</strong> Use <code>G581</code> (Angle-Based). The post provides a 3D hole center (<code>CX, CY, CZ</code>) and the machine's rotary angle (<code>B</code>). The <code>A</code> angle will be 0.</li>
+                            <li><strong>5/6-Axis (XYZ + A-Tilt + B-Rotary):</strong> Use <code>G581</code> (Angle-Based). The post provides a 3D hole center (<code>CX, CY, CZ</code>) and the machine's compound rotary/tilt angles (<code>A, B</code>).</li>
+                            <li><strong>Vector-Based:</strong> <code>G481</code> is also available, which accepts a 3D tool vector (<code>PI, PJ, PK</code>) instead of angles. <code>G581</code> is generally preferred.</li>
+                        </ul>
+                    </section>
+
+                    <section id="gd-6" class="section">
+                        <h2>6. Supported G Codes (Gundrill & Tapping)</h2>
+                        <p>This list includes only Gundrill-specific cycles and relevant tapping codes.</p>
+                        
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code(s)</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>G80</code></td>
+                                    <td>End Gundrill Cycle</td>
+                                    <td><code>DT</code> (Optional Dwell Time in seconds)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>G81</code></td>
+                                    <td>Gundrill Cycle (3-Axis)</td>
+                                    <td rowspan="3">
+                                        <strong>Cycle Start Parameters (<code>G81</code>, <code>G481</code>, <code>G581</code>):</strong><br>
+                                        <code>CX,CY,CZ</code> (Start Point)<br>
+                                        <code>RT</code> (Retract Point)<br>
+                                        <code>WS</code> (W Start/Restart Point)<br>
+                                        <code>IWD</code> (Initial W Drill Depth)<br>
+                                        <code>IRPM</code> (Initial RPM)<br>
+                                        <code>IDPR</code> (Initial Depth Per Rev)<br>
+                                        <code>ISL</code> (Initial Spindle Load %)<br>
+                                        <code>IOP</code> (Initial Oil Pressure)<br>
+                                        <code>IDL</code> (Initial Drive Load %)<br><br>
+                                        <strong>5/6-Axis Parameters:</strong><br>
+                                        (<code>G481</code> only): <code>PI, PJ, PK</code> (Axis Vector)<br>
+                                        (<code>G581</code> only): <code>A, B</code> (Tilt/Rotary Angles)
+                                    </td>
+                                </tr>
+                                <tr><td><code>G481</code></td><td>Gundrill Cycle (Vector-Based)</td></tr>
+                                <tr><td><code>G581</code></td><td>Gundrill Cycle (Angle-Based)</td></tr>
+                                <tr>
+                                    <td><code>G801</code></td>
+                                    <td>Gundrill Depth ("Normal" Mode)</td>
+                                    <td rowspan="2">
+                                        <strong>Depth Parameters (Used after <code>G81</code>/<code>G481</code>/<code>G581</code>):</strong><br>
+                                        <code>W</code> (Next Drill Depth)<br>
+                                        <code>RPM</code> (Revolutions Per Minute)<br>
+                                        <code>DPR</code> (Depth Per Revolution)<br>
+                                        <code>SL</code> (Spindle Load %)<br>
+                                        <code>OP</code> (Oil Pressure)<br>
+                                        <code>DL</code> (Drive Load %)
+                                    </td>
+                                </tr>
+                                <tr><td><code>G802</code></td><td>Gundrill Depth ("Slow" / Crossline)</td></tr>
+                                <tr>
+                                    <td><code>G84</code></td>
+                                    <td>Tapping - Right Handed (3-Axis)</td>
+                                    <td><code>X</code> (Center), <code>Y</code> (Center), <code>Z</code> (End), <code>K</code> (Retract), <code>R</code> (Rapid Pt), <code>P</code> (Pitch), <code>D</code> (Tap Diameter)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>G484</code></td>
+                                    <td>Tarus Tapping - Right Handed (Vector-Based)</td>
+                                    <td rowspan="2">
+                                        <strong>5/6-Axis Tapping Parameters:</strong><br>
+                                        <code>CX,CY,CZ</code> (Center), <code>RT</code> (Retract), <code>DP</code> (Depth), <code>DS</code> (Start Dia), <code>PT</code> (Pitch),<br>
+                                        plus <code>PI,PJ,PK</code> or <code>A,B</code>
+                                    </td>
+                                </tr>
+                                <tr><td><code>G584</code></td><td>Tarus Tapping - Right Handed (Angle-Based)</td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section id="gd-7" class="section">
+                        <h2>7. Supported M Codes (Gundrill)</h2>
+                        <p>This list includes all relevant M-Codes.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>M00</code></td><td>Program Stop</td><td></td></tr>
+                                <tr><td><code>M01</code></td><td>Optional Stop / Program Pause</td><td>Displays comments to the operator.</td></tr>
+                                <tr><td><code>M03</code></td><td>Spindle On - Clockwise (CW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M04</code></td><td>Spindle On - Counter-Clockwise (CCW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M05</code></td><td>Spindle Off</td><td></td></tr>
+                                <tr><td><code>M16</code></td><td>Tool Change – Gundrill Only</td><td><code>T#</code> (Tool location)</td></tr>
+                                <tr><td><code>M18</code></td><td>Gundrill Oil Off</td><td>Only works with <code>G81</code>/<code>G481</code>/<code>G581</code></td></tr>
+                                <tr><td><code>M30</code></td><td>Program End</td><td></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section id="gd-8" class="section">
+                        <h2>8. Example Programs</h2>
+
+                        <h3>3-Axis (XYZ) Gundrill & Tap Example (G81/G84)</h3>
+                        <p>This example shows a standard 3-axis <code>G81</code> cycle, followed by a standard <code>G84</code> tap cycle.</p>
+<pre><code>N0001(3-AXIS GUNDRILL & TAP EXAMPLE)
+N0002(GUNDRILL OPERATION)
+N0003M16 T1
+N0004(INSTALL .500" GUNDRILL)
+N0005G81 CX5.0 CY10.0 CZ1.0 RT2.0 WS0 IWD0.25 IRPM2500 IDPR0.001 ISL50 IOP800 IDL50
+N0006G801 W-10.0 RPM3000 DPR0.0015 SL50 DL50 OP800
+N0007G80 DT0
+N0008G00 Z10.0
+N0009M05
+N0010
+N0011(TAPPING OPERATION)
+N0012M16 T2
+N0013(INSTALL 5/8-11 TAP)
+N0014M03 S400
+N0015G84 X5.0 Y10.0 Z-8.0 K2.0 R1.0 P0.0909 D0.625
+N0016G00 Z10.0
+N0017M05
+N0018M30</code></pre>
+
+                        <h3>4-Axis (XYZ + B) Gundrill & Tap Example (G581/G584)</h3>
+                        <p>This example shows a <code>G581</code> cycle at a 45-degree <code>B</code> angle (<code>A</code> is 0), followed by a <code>G584</code> tap cycle at the same angle.</p>
+<pre><code>N0001(4-AXIS GUNDRILL & TAP EXAMPLE)
+N0002(GUNDRILL OPERATION)
+N0003M16 T1
+N0004(INSTALL .500" GUNDRILL)
+N0005G00 B45.0
+N0006G581 CX5.0 CY10.0 CZ1.0 RT2.0 WS0 IWD0.25 IRPM2500 IDPR0.001 ISL50 IOP800 IDL50 A0 B45.0
+N0007G801 W-10.0 RPM3000 DPR0.0015 SL50 DL50 OP800
+N0008G80 DT0
+N0009G00 Z10.0
+N0010G00 B0
+N0011M05
+N0012
+N0013(TAPPING OPERATION)
+N0014M16 T2
+N0015(INSTALL 5/8-11 TAP)
+N0016M03 S400
+N0017G00 B45.0
+N0018G584 CX5.0 CY10.0 CZ1.0 RT2.0 DP-8.0 DS0.625 PT0.0909 A0 B45.0
+N0019G00 Z10.0
+N0020G00 B0
+N0021M05
+N0022M30</code></pre>
+
+                        <h3>5/6-Axis (XYZ + A + B) Gundrill & Tap Example (G581/G584)</h3>
+                        <p>This example shows a <code>G581</code> cycle at an <code>A-5 B-3</code> compound angle, followed by a <code>G584</code> tap cycle at the same angle.</p>
+<pre><code>N0001(5/6-AXIS GUNDRILL & TAP EXAMPLE)
+N0002(GUNDRILL OPERATION)
+N0003M16 T50
+N0004(INSTALL .905" GUNDRILL)
+N0005G00 A-5.0 B-3.0
+N0006G581 CX4.0261 CY-0.0262 CZ-0.3986 RT5 WS0 IWD0.25 IRPM700 IDPR0.0006 ISL30 IOP1200 IDL25 A-5.0 B-3.0
+N0007G802 W0.7500 RPM500 DPR0.0005 SL70 DL65 OP900 (CROSS-LINE)
+N0008G801 W8.0000 RPM850 DPR0.0008 SL80 DL75 OP1000 (NORMAL)
+N0009G80 DT0
+N0010G00 Z10.0
+N0011G00 A0 B0
+N0012M05
+N0013
+N0014(TAPPING OPERATION)
+N0015M16 T51
+N0016(INSTALL 1"-14 TAP)
+N0017M03 S300
+N0018G00 A-5.0 B-3.0
+N0019G584 CX4.0261 CY-0.0262 CZ-0.3986 RT5.0 DP-6.0 DS1.0 PT0.0714 A-5.0 B-3.0
+N0020G00 Z10.0
+N0021G00 A0 B0
+N0022M05
+N0023M30</code></pre>
+
+                        <h3>Auxiliary Spindle (Milling/Drilling)</h3>
+                        <p>This section provides specifications for the <strong>Gundrill Auxiliary Spindle</strong>. This spindle is used for standard milling/drilling/tapping operations, not gundrilling.</p>
+                        <p>The key differences for this spindle are:</p>
+                        <ul>
+                            <li>It uses standard milling M-Codes (<code>M06</code>, <code>M03</code>, etc.), <strong>not</strong> Gundrill M-Codes (<code>M16</code>).</li>
+                            <li>It has a specific M-Code for Through Spindle Coolant (<code>M52 V#</code> / <code>M53</code>).</li>
+                        </ul>
+                        
+                        <h4>Supported G Codes (Milling/Drilling)</h4>
+                        <p>The Auxiliary Spindle uses the standard TarusNC 5-Axis Canned Cycles (<code>G58x</code>) for positional drilling/tapping. It does *not* use the <code>G81</code> Gundrill cycle.</p>
+                        
+                        <h4>Supported M Codes (Auxiliary Spindle)</h4>
+                        <p>This list includes M-Codes relevant to the Auxiliary Spindle, which uses milling codes (like <code>M06</code>) and has its own through-spindle coolant codes.</p>
+                        <table class="spec-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Description</th>
+                                    <th>Parameters</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td><code>M00</code></td><td>Program Stop</td><td></td></tr>
+                                <tr><td><code>M01</code></td><td>Optional Stop / Program Pause</td><td>Displays comments to the operator.</td></tr>
+                                <tr><td><code>M03</code></td><td>Spindle On - Clockwise (CW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M04</code></td><td>Spindle On - Counter-Clockwise (CCW)</td><td><code>S</code> (e.g., <code>S5000</code> for 5000 RPM)</td></tr>
+                                <tr><td><code>M05</code></td><td>Spindle Off</td><td></td></tr>
+                                <tr><td><code>M06</code></td><td>Tool Change (Auxiliary Spindle)</td><td><code>T#</code> (Tool number)</td></tr>
+                                <tr><td><code>M08</code></td><td>Coolant On (Standard Flood)</td><td></td></tr>
+                                <tr><td><code>M09</code></td><td>All Coolant Off</td><td></td></tr>
+                                <tr><td><code>M52</code></td><td>Through Spindle Coolant On</td><td><code>V#</code> (Volume/GPM, e.g., <code>V10.0</code>)</td></tr>
+                                <tr><td><code>M53</code></td><td>Through Spindle Coolant Off</td><td></td></tr>
+                                <tr><td><code>M30</code></td><td>Program End</td><td></td></tr>
+                            </tbody>
+                        </table>
+
+                        <h4>Example: Auxiliary Spindle Drilling with TSC (M52/M53)</h4>
+                        <p>This example shows a <code>G583</code> drilling cycle using the Auxiliary Spindle (note the <code>M06</code> tool change). It specifically turns Through Spindle Coolant (<code>M52</code>) on before each hole and off (<code>M53</code>) after.</p>
+<pre><code>N1 (THROUGHSPINDLECOOLANTTEST.NC)
+N2 ( T105 =  1.156" SUMI  )
+N3 G603 G631
+N4 ( SETUP = TARUS_5AXIS_GD-SETUP_3 [0.00,0.00])
+N5 (TNUM  105)
+N6 ( TNAME  1.156" SUMI )
+N7 ( TOOL DIA     1.1560)
+N8 ( OPERATION    DRILL)
+N9 M6 T105
+N10 G603 G631
+N11 G0 A0.0000 B0.0000
+N12 G0 X8.3750 Y13.4500 A0.0000 B0.0000
+N13 M52
+N14 G0 X8.3750 Y13.4500 Z3.0000
+N15 M3 S1156
+N16 G0 X8.3750 Y13.4500 Z3.0000
+N17 M52 V10.0000
+N18 G583 CX8.3750 CY13.4500 CZ0.0000 RT3.0000 DP3.2104 F14. IP0 PP100 CB0 B0.0000
+N19 M53
+N20 G04  P3.0
+N21 G0 X9.5000 Y20.2500 Z3.0000
+N22 M52 V10.0000
+N23 G583 CX9.5000 CY20.2500 CZ0.0000 RT3.0000 DP3.2104 F14. IP0 PP100 CB0 B0.0000
+N24 M53
+...
+N191 M09
+N192 M5
+N193 G603 G631
+N194 ( PROGRAM FINISHED)</code></pre>
+                    </section>
+
+                    <section id="gd-9" class="section">
+                        <h2>9. Filename and Directory Requirements</h2>
+                        <p>The post-processor must be configured to output filenames and directories that adhere to the following rules.</p>
+                        
+                        <h4>9.1. Naming Rules</h4>
+                        <ul>
+                            <li>Spaces or punctuation are not permitted. Use dashes (<code>-</code>) if necessary (e.g., <code>My-New-File.NC</code>).</li>
+                            <li>Filenames must be concise and descriptive.</li>
+                            <li>Filenames must be <code>lowercase</code>.</li>
+                            <li>Version numbers or dates are not permitted in filenames.</li>
+                        </ul>
+
+                        <h4>9.2. Illegal Filename Characters</h4>
+                        <p>The post-processor <strong>must not</strong> use any of the following characters or symbols in filenames or folders:</p>
+                        <div class="two-column-list">
+                            <div>
+                                <ul>
+                                    <li><code>#</code> (pound)</li>
+                                    <li><code>&amp;</code> (ampersand)</li>
+                                    <li><code>\</code> (back slash)</li>
+                                    <li><code>/</code> (forward slash)</li>
+                                    <li><code>*</code> (asterisk)</li>
+                                    <li><code>?</code> (question mark)</li>
+                                    <li>(blank spaces)</li>
+                                    <li><code>$</code> (dollar sign)</li>
+                                    <li><code>@</code> (at sign)</li>
+                                    <li><code>+</code> (plus sign)</li>
+                                    <li><code>|</code> (pipe)</li>
+                                    <li>emojis</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <ul>
+                                    <li><code>%</code> (percent)</li>
+                                    <li><code>{</code> (left curly bracket)</li>
+                                    <li><code>}</code> (right curly bracket)</li>
+                                    <li><code>&lt;</code> (left angle bracket)</li>
+                                    <li><code>&gt;</code> (right angle bracket)</li>
+                                    <li><code>!</code> (exclamation point)</li>
+                                    <li><code>'</code> (single quotes)</li>
+                                    <li><code>"</code> (double quotes)</li>
+                                    <li><code>:</code> (colon)</li>
+                                    <li><code>`</code> (backtick)</li>
+                                    <li><code>=</code> (equal sign)</li>
+                                    <li>alt codes</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </article>
+
+    </main>
+</div>
+
+<footer class="page-footer">TarusNC Post-Processor Guide for TARUS Machines</footer>
+
+<!-- Floating Formatting Toolbar -->
+<div id="formatting-toolbar" class="formatting-toolbar data-noexport">
+    <button onmousedown="event.preventDefault(); document.execCommand('bold',false,null)">B</button>
+    <button onmousedown="event.preventDefault(); document.execCommand('italic',false,null)">I</button>
+    <button onmousedown="event.preventDefault(); document.execCommand('insertUnorderedList',false,null)">• List</button>
+    <button onmousedown="event.preventDefault(); document.execCommand('insertOrderedList',false,null)">1. List</button>
+    <button onmousedown="event.preventDefault(); document.execCommand('formatBlock',false,'pre')">&lt;pre&gt;</button>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const mobileBackdrop = document.getElementById('mobile-backdrop');
+        const mobileToggle = document.getElementById('mobile-menu-toggle');
+
+        // Toggle Mobile Sidebar
+        function toggleMobileMenu() {
+            const activeSidebar = document.querySelector('.head-mode-content[aria-hidden="false"] .sidebar') || document.querySelector('.tab-content[aria-hidden="false"] .sidebar');
+            if(activeSidebar) {
+                activeSidebar.classList.toggle('open');
+                mobileBackdrop.classList.toggle('open');
+            }
+        }
+        mobileToggle.addEventListener('click', toggleMobileMenu);
+        mobileBackdrop.addEventListener('click', toggleMobileMenu);
+
+        // Tab Setup & Mobile Auto-Close
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.disabled) return;
+                tabButtons.forEach(b => {
+                    b.setAttribute('aria-selected', 'false');
+                    const p = document.getElementById(b.getAttribute('aria-controls'));
+                    if (p) p.setAttribute('aria-hidden', 'true');
+                });
+                btn.setAttribute('aria-selected', 'true');
+                const target = document.getElementById(btn.getAttribute('aria-controls'));
+                if (target) target.setAttribute('aria-hidden', 'false');
+
+                // Mobile collapse
+                if (window.innerWidth < 768) {
+                    document.querySelectorAll('.sidebar.open').forEach(s => s.classList.remove('open'));
+                    mobileBackdrop.classList.remove('open');
+                }
+            });
+        });
+
+        // Mode Setup & Mobile Auto-Close
+        const modeButtons = document.querySelectorAll('.mode-toggle-btn');
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const group = btn.getAttribute('data-group');
+                document.querySelectorAll(`.mode-toggle-btn[data-group="${group}"]`).forEach(b => {
+                    b.setAttribute('aria-pressed', 'false');
+                    const target = document.getElementById(b.getAttribute('data-target'));
+                    if (target) target.setAttribute('aria-hidden', 'true');
+                });
+                btn.setAttribute('aria-pressed', 'true');
+                const target = document.getElementById(btn.getAttribute('data-target'));
+                if (target) target.setAttribute('aria-hidden', 'false');
+
+                // Mobile collapse
+                if (window.innerWidth < 768) {
+                    document.querySelectorAll('.sidebar.open').forEach(s => s.classList.remove('open'));
+                    mobileBackdrop.classList.remove('open');
+                }
+            });
+        });
+
+        // ========================================= //
+        // DYNAMIC EDIT MODE INJECTION & LOGIC       //
+        // ========================================= //
+        
+        let editModeActive = false;
+
+        // Inject Sidebar Controls
+        document.querySelectorAll('.sidebar').forEach(sidebar => {
+            const controls = document.createElement('div');
+            controls.className = 'edit-controls data-noexport';
+            controls.innerHTML = `
+                <button class="edit-btn toggle-edit-mode">Enable Edit Mode</button>
+                <div class="export-tools" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
+                    <button class="edit-btn export-btn trigger-save-master">Save Master Guide</button>
+                    <button class="edit-btn export-btn field-guide trigger-export-custom">Export Custom Field Guide</button>
+                </div>
+            `;
+            sidebar.appendChild(controls);
+        });
+
+        // Inject step toolbars on all sections
+        function injectStepToolbars() {
+            document.querySelectorAll('.section').forEach(section => {
+                if(!section.querySelector('.step-toolbar')) {
+                    const tb = document.createElement('div');
+                    tb.className = 'step-toolbar data-noexport';
+                    tb.contentEditable = 'false';
+                    tb.innerHTML = `
+                        <label style="display:flex; align-items:center; font-size:12px; gap:4px; cursor:pointer;">
+                            <input type="checkbox" class="field-guide-cb" checked> Include in Field Guide
+                        </label>
+                        <button class="tb-btn move-up" title="Move Up">↑</button>
+                        <button class="tb-btn move-down" title="Move Down">↓</button>
+                        <button class="tb-btn edit-step" title="Edit Step">Edit</button>
+                        <button class="tb-btn delete-step" title="Delete Step">Delete</button>
+                    `;
+                    section.insertBefore(tb, section.firstChild);
+                }
+            });
+        }
+
+        // Inject 'Add New' buttons at the bottom of content areas
+        function injectAddButtons() {
+            document.querySelectorAll('.content-area').forEach(area => {
+                if(!area.querySelector('.add-step-container')) {
+                    const container = document.createElement('div');
+                    container.className = 'add-step-container data-noexport';
+                    container.innerHTML = `
+                        <button class="add-btn create-step" style="background:#84BD00; color:#000;">+ Add New Step</button>
+                        <button class="add-btn create-warn" style="background:#cc0000; color:#fff;">+ Add Warning Block</button>
+                        <button class="add-btn create-info" style="background:#005a9c; color:#fff;">+ Add Info Block</button>
+                    `;
+                    area.appendChild(container);
+                }
+            });
+        }
+
+        // Toggle Edit Mode Logic
+        document.addEventListener('click', e => {
+            if (e.target.classList.contains('toggle-edit-mode')) {
+                editModeActive = !editModeActive;
+                document.body.classList.toggle('edit-mode-active', editModeActive);
+                
+                document.querySelectorAll('.toggle-edit-mode').forEach(btn => {
+                    btn.textContent = editModeActive ? "Disable Edit Mode" : "Enable Edit Mode";
+                    btn.style.background = editModeActive ? "#84BD00" : "";
+                    btn.style.color = editModeActive ? "#000" : "";
+                });
+                document.querySelectorAll('.export-tools').forEach(tool => {
+                    tool.style.display = editModeActive ? "flex" : "none";
+                });
+
+                if (editModeActive) {
+                    injectStepToolbars();
+                    injectAddButtons();
+                } else {
+                    document.querySelectorAll('.section[contenteditable="true"]').forEach(sec => {
+                        sec.contentEditable = "false";
+                        const btn = sec.querySelector('.edit-step');
+                        if (btn) { btn.textContent = 'Edit'; btn.style.background = ''; }
+                    });
+                    document.getElementById('formatting-toolbar').classList.remove('active');
+                }
+            }
+
+            // Move Up/Down/Delete Logic
+            if(e.target.classList.contains('move-up')) {
+                const section = e.target.closest('.section');
+                const prev = section.previousElementSibling;
+                if(prev && prev.classList.contains('section')) {
+                    section.parentNode.insertBefore(section, prev);
+                    section.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
+            }
+            if(e.target.classList.contains('move-down')) {
+                const section = e.target.closest('.section');
+                const next = section.nextElementSibling;
+                if(next && next.classList.contains('section')) {
+                    section.parentNode.insertBefore(next, section);
+                    section.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
+            }
+            if(e.target.classList.contains('delete-step')) {
+                if(confirm("Are you sure you want to delete this step?")) {
+                    e.target.closest('.section').remove();
+                }
+            }
+
+            // Edit Step Toggle
+            if(e.target.classList.contains('edit-step')) {
+                const section = e.target.closest('.section');
+                if(section.isContentEditable) {
+                    section.contentEditable = "false";
+                    e.target.textContent = "Edit";
+                    e.target.style.background = "";
+                    document.getElementById('formatting-toolbar').classList.remove('active');
+                } else {
+                    section.contentEditable = "true";
+                    section.querySelector('.step-toolbar').contentEditable = "false";
+                    e.target.textContent = "Save";
+                    e.target.style.background = "#84BD00";
+                    document.getElementById('formatting-toolbar').classList.add('active');
+                    section.focus();
+                }
+            }
+
+            // Add Block Actions
+            if(e.target.classList.contains('create-step')) {
+                const area = e.target.closest('.content-area');
+                const newSection = document.createElement('section');
+                newSection.className = 'section';
+                newSection.innerHTML = `<h2>New Step Title</h2><p>Enter your content here...</p>`;
+                area.insertBefore(newSection, e.target.closest('.add-step-container'));
+                injectStepToolbars();
+                newSection.scrollIntoView({behavior: 'smooth'});
+            }
+            
+            if(e.target.classList.contains('create-warn') || e.target.classList.contains('create-info')) {
+                const area = e.target.closest('.content-area');
+                let targetSec = area.querySelector('.section[contenteditable="true"]');
+                if(!targetSec) {
+                    const sections = area.querySelectorAll('.section');
+                    targetSec = sections[sections.length - 1];
+                }
+                if(targetSec) {
+                    const box = document.createElement('div');
+                    box.className = e.target.classList.contains('create-warn') ? 'warning-box' : 'info-box';
+                    box.innerHTML = e.target.classList.contains('create-warn') ? '<strong>WARNING:</strong> Edit this warning.' : '<strong>INFO:</strong> Edit this info.';
+                    targetSec.appendChild(box);
+                } else {
+                    alert("Please add or select a step first.");
+                }
+            }
+
+            // Download Triggers
+            if (e.target.classList.contains('trigger-save-master')) {
+                downloadHTML('Master_Guide.html', getCleanClone(false));
+            }
+            if (e.target.classList.contains('trigger-export-custom')) {
+                downloadHTML('Custom_Field_Guide.html', getCleanClone(true));
+            }
+        });
+
+        // ========================================= //
+        // EXPORT ENGINE LOGIC                       //
+        // ========================================= //
+
+        function downloadHTML(filename, htmlContent) {
+            const blob = new Blob([htmlContent], {type: 'text/html'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function getCleanClone(isFieldGuide) {
+            // Force checkbox checked state to real DOM attributes before clone
+            document.querySelectorAll('.field-guide-cb').forEach(cb => {
+                if(cb.checked) cb.setAttribute('checked', 'checked');
+                else cb.removeAttribute('checked');
+            });
+
+            const clone = document.documentElement.cloneNode(true);
+            
+            // Wipe active visual editing states
+            clone.querySelector('body').classList.remove('edit-mode-active');
+            clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+
+            if (isFieldGuide) {
+                // Delete unchecked sections
+                clone.querySelectorAll('.section').forEach(sec => {
+                    const cb = sec.querySelector('.field-guide-cb');
+                    if (cb && !cb.hasAttribute('checked')) {
+                        sec.remove();
+                    }
+                });
+
+                // Strip empty tabs
+                clone.querySelectorAll('.tab-content').forEach(tab => {
+                    if (tab.querySelectorAll('.section').length === 0) {
+                        const tabId = tab.id;
+                        const btn = clone.querySelector(`.tab-button[aria-controls="${tabId}"]`);
+                        if (btn) btn.remove();
+                        tab.remove();
+                    }
+                });
+
+                // Strip empty inner head-mode contents (configs)
+                clone.querySelectorAll('.head-mode-content').forEach(hmc => {
+                    if (hmc.querySelectorAll('.section').length === 0) {
+                        const targetId = hmc.id;
+                        const btn = clone.querySelector(`.mode-toggle-btn[data-target="${targetId}"]`);
+                        if (btn) btn.remove();
+                        hmc.remove();
+                    }
+                });
+
+                // Rename headers
+                const title = clone.querySelector('title');
+                if (title) title.textContent = "Custom Field Guide (TARUS)";
+                const h1 = clone.querySelector('.header-title');
+                if (h1) h1.textContent = "Custom Field Guide";
+                const mobileH2 = clone.querySelector('.mobile-header h2');
+                if (mobileH2) mobileH2.textContent = "Custom Field Guide";
+            }
+
+            // Erase ALL editing UI infrastructure
+            clone.querySelectorAll('.data-noexport').forEach(el => el.remove());
+
+            return "<!DOCTYPE html>\n" + clone.outerHTML;
+        }
+
+    });
+</script>
+</body>
+</html>
