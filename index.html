@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TarusNC Post-Processor Development Guide</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#f8f9fa', 100: '#f1f3f5', 200: '#e9ecef', 300: '#dee2e6', 400: '#ced4da', 500: '#adb5bd', 600: '#343a40', 700: '#212529', 800: '#15171c', 900: '#000000', 
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .val { @apply bg-primary-50 text-primary-900 border-2 border-primary-200 font-black px-2 py-0.5 rounded-md shadow-sm mx-1 text-[13px] tracking-wide inline-block; }
+        .ui { @apply font-bold text-slate-700; }
+        kbd { @apply bg-white border border-slate-300 text-slate-800 rounded-md px-2 py-0.5 text-xs font-sans font-bold shadow-[0_2px_0_rgba(203,213,225,1)] mx-1; }
+        .badge { @apply inline-block px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded border border-primary-300 bg-primary-100 text-primary-900 shadow-sm mb-4; }
+        
+        /* Carbon Theme Accents */
+        .nav-link.bg-primary-600 { border-left: 4px solid #adb5bd; }
+        .bg-primary-600.text-white.p-4.flex.items-center { border-bottom: 3px solid #adb5bd; }
+        .bg-primary-600.text-white.p-4.flex.items-center > span.text-3xl { color: #adb5bd !important; opacity: 1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+        
+        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Editor Styles */
+        .step-card { position: relative; scroll-margin-top: 80px; } 
+        body:not(.edit-mode) .injected-tool { display: none !important; }
+        body.edit-mode .step-card { border: 2px solid transparent; transition: all 0.2s; }
+        body.edit-mode .step-card:hover { box-shadow: 0 0 0 2px #adb5bd; }
+        body.edit-mode .step-card.is-editing { outline: 2px dashed #475569; outline-offset: 4px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); z-index: 10; }
+        [contenteditable="true"] { outline: none; border-radius: 4px; min-height: 1.5em; transition: all 0.2s; }
+        .editable-body[contenteditable="true"] { background-color: #f8fafc; box-shadow: inset 0 0 0 1px #cbd5e1; padding: 1rem; }
+        .editable-title[contenteditable="true"], .editable-num[contenteditable="true"] { background-color: rgba(255,255,255,0.15); padding: 0 0.5rem; }
+        
+        .activity-cell ul { list-style-type: disc !important; padding-left: 1.25rem !important; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .activity-cell ul li { margin-bottom: 0.35rem; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased flex h-screen overflow-hidden relative">
+
+    <div id="sidebarBackdrop" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-40 hidden md:hidden" onclick="toggleSidebar()"></div>
+
+    <aside id="sidebar" class="w-72 bg-slate-900 text-white flex-shrink-0 h-full flex flex-col shadow-xl z-50 fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out">
+        <div class="p-6 bg-slate-950 border-b border-slate-800 flex justify-between items-start">
+            <div class="w-full pr-2">
+                <h1 class="text-xl font-black tracking-tight text-white leading-tight">TarusNC Guide</h1>
+                <p class="text-xs text-slate-400 mt-1 font-medium">Post-Processor Development Manual</p>
+                <div class="mt-4 bg-slate-800 border-l-4 border-l-primary-500 border-y border-r border-slate-700 rounded-r-lg p-3 shadow-md w-full">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-400 uppercase tracking-widest text-[10px] mb-1">Last Updated</span>
+                        <span id="doc-date" class="text-white font-mono font-bold text-sm">Today</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-1 -mt-1 -mr-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto sidebar-scroll py-4 px-3 space-y-1" id="nav-menu">
+            <button onclick="switchTab('tab-lcmt')" class="nav-link w-full flex items-center px-4 py-3 text-sm font-semibold rounded-lg bg-primary-600 text-white shadow-md transition-all text-left">
+                <svg class="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg> LCMT 5 AXIS
+            </button>
+            
+            <!-- Chapter Index for LCMT -->
+            <ul class="text-slate-400 text-xs space-y-2 pl-12 py-2 mb-2 hidden md:block" id="lcmt-chapters">
+                <li><a href="#ch1" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 1. Introduction</a></li>
+                <li><a href="#ch2" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 2. Core Logic & Tolerances</a></li>
+                <li><a href="#ch3" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 3. File Structure & Formatting</a></li>
+                <li><a href="#ch4" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 4. Kinematics & Transformations</a></li>
+                <li><a href="#ch5" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 5. Tooling & Compensation Logic</a></li>
+                <li><a href="#ch6" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 6. Supported G Codes</a></li>
+                <li><a href="#ch7" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 7. Supported M Codes</a></li>
+                <li><a href="#ch8" class="hover:text-white transition-colors flex items-center"><span class="w-1 h-1 bg-slate-600 rounded-full mr-2"></span> 8. Example Programs</a></li>
+            </ul>
+            
+            <div class="my-3 border-t border-slate-700 mx-2"></div>
+            <button onclick="switchTab('tab-activity')" class="nav-link w-full flex items-center px-4 py-3 text-sm font-semibold rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-left">
+                <svg class="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg> Activity Log
+            </button>
+            <div class="my-3 border-t border-slate-700 mx-2"></div>
+            <button onclick="switchTab('tab-tutorial')" class="nav-link w-full flex items-center px-4 py-3 text-sm font-bold rounded-lg text-primary-300 hover:text-white hover:bg-slate-800 transition-all text-left border border-slate-700 bg-slate-950">
+                <svg class="w-5 h-5 mr-3 opacity-100 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Editor Tutorial & Help
+            </button>
+        </nav>
+        
+        <div class="p-4 border-t border-slate-800 space-y-3">
+            <button id="editModeToggle" onclick="toggleGlobalEditMode()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg flex justify-center items-center transition shadow text-sm">Enable Edit Mode</button>
+            <button id="downloadGuideBtn" onclick="downloadGuide()" class="w-full bg-primary-600 hover:bg-primary-500 text-white font-bold py-2 px-4 rounded-lg justify-center items-center transition shadow text-sm hidden">Save Master Guide</button>
+            <button id="exportFieldGuideBtn" onclick="exportFieldGuide()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg justify-center items-center transition shadow text-sm hidden">Export Active Guide</button>
+            <div class="pt-2 text-center text-slate-500 mt-2 text-[10px]">Interactive Standard Procedure <br>&copy; TarusNC Docs</div>
+        </div>
+    </aside>
+
+    <main class="flex-1 h-full overflow-y-auto bg-slate-50 relative scroll-smooth flex flex-col">
+        <div class="md:hidden bg-slate-900 text-white p-4 flex items-center shadow-md sticky top-0 z-30 flex-shrink-0">
+            <button onclick="toggleSidebar()" class="mr-4 text-slate-300 hover:text-white focus:outline-none p-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg></button>
+            <h1 class="text-lg font-black tracking-tight leading-tight truncate">TarusNC Post-Processor Guide</h1>
+        </div>
+
+        <div class="max-w-4xl w-full mx-auto py-6 px-4 md:py-10 md:px-8 pb-32">
+            
+            <!-- ========================================================== -->
+            <!-- LCMT 5 AXIS TAB -->
+            <!-- ========================================================== -->
+            <div id="tab-lcmt" class="tab-content active">
+                <span class="badge">Architecture</span>
+                <h2 class="text-3xl font-black text-slate-900 mb-8 tracking-tight">LCMT 5 AXIS Platform</h2>
+                
+                <img src="LCMT.jpg" alt="LCMT Machine Overview" class="w-full object-cover rounded-2xl shadow-md mb-8 border border-slate-200" style="max-height: 400px;">
+
+                <div class="bg-slate-100 border-l-4 border-slate-400 p-4 rounded mt-2 shadow-sm mb-8">
+                    <span class="font-black text-[10px] text-slate-500 uppercase tracking-widest block mb-1">Architecture Note</span>
+                    <span class="text-sm text-slate-700 font-medium">This machine type supports <strong>continuous 5-axis motion</strong>, where the <code>X</code>, <code>Y</code>, <code>Z</code>, <code>A</code>, and <code>C</code> axes can all move simultaneously to maintain tool orientation to the part surface.</span>
+                </div>
+
+                <!-- CARD 1 -->
+                <div id="ch1" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">1</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Introduction</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body">
+                        <p>This guide provides specifications for developing a post-processor for the TarusNC control on a <strong>continuous 5-axis mill with a Fork-Style A/C Head</strong>. This information is based on the "3+2 & 5-Axis Milling Overview" and "Right Hand Rule" sections of this guide.</p>
+                        
+                        <div class="bg-slate-100 border-l-4 border-slate-400 p-3 rounded mt-2 shadow-sm">
+                            <span class="font-black text-[10px] text-slate-500 uppercase tracking-widest block mb-1">Note</span>
+                            <span class="text-xs text-slate-600 font-medium">This guide applies to both Gantry and Moving Table machine configurations, as the head kinematics remain the same. Developers must verify specific machine travel limits (e.g., max Z for safe retracts) for the target machine.</span>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Post-Processor Test Kit</h4>
+                        <p>To ensure a rapid and successful post-processor deployment, provide the CAM vendor or developer with a "Post-Processor Test Kit." This kit is typically a .zip file containing:</p>
+                        <ul class="list-decimal pl-5 space-y-2">
+                            <li><strong>A simple 3D CAD model:</strong> A small test block or representative part with features relevant to the machine (e.g., angled holes, sloped surfaces).</li>
+                            <li><strong>A proven .NC program:</strong> A G-code file that has been verified to run successfully on the target machine to cut that exact CAD model.</li>
+                        </ul>
+                        <p class="mt-2">This allows the developer to program the part, generate code, and compare their output to a "known good" file, dramatically speeding up debugging.</p>
+                    </div>
+                </div>
+
+                <!-- CARD 2 -->
+                <div id="ch2" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">2</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Core Programming Logic & Tolerances</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body">
+                        <h4 class="font-bold text-slate-800 mt-2 mb-2">Continuous 5-Axis Milling Overview</h4>
+                        <p>This is different than "3+2" milling. When performing 5 axis machining, the X Y Z A & C axes are <strong>continuously</strong> moving, positioning the tool relative to the surface it is machining. Careful programming with extensive collision control capabilities must be used when creating these types of toolpaths.</p>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Toolpath Tolerance Recommendations for TarusNC</h4>
+                        <p>The TarusNC control, designed for high-speed contouring, excels with finely detailed toolpaths. To maximize surface finish quality, adhere to these guidelines:</p>
+                        
+                        <ul class="list-disc pl-5 space-y-3">
+                            <li><strong>Chordal Deviation (Tolerance):</strong> For final finish cuts, limit chordal deviation to a maximum of 0.0004 inches (0.01 millimeters). This tight tolerance ensures accurate reproduction of the intended surface.</li>
+                            <li><strong>Point Distribution (Point Density):</strong> On finish toolpaths, enable "insert extra points" or equivalent settings to maintain a maximum spacing of 0.200 inches (5 millimeters) between points. This high point density provides smooth, continuous motion.</li>
+                            <li><strong>Implementation and Impact:</strong> Adjust CAD/CAM settings to generate toolpaths that meet these specifications. Using these recommendations will significantly improve surface finish quality. Failure to adhere to these tolerances and point density values can result in unsatisfactory surface quality and finish.</li>
+                        </ul>
+
+                        <div class="mt-6 mb-6">
+                            <img src="Cycle 832 tolerance 2.JPG" alt="CYCLE832 Tolerance Settings" class="w-full max-w-2xl mx-auto border border-slate-200 rounded-lg shadow-sm">
+                            <p class="text-center text-sm italic mt-2 text-slate-500">Reference: CYCLE832 Recommended Settings and Tolerances</p>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Modal Programming Considerations</h4>
+                        <p>While TarusNC supports modal G-code commands (where settings remain active until changed), explicit programming is strongly recommended for clarity and debugging.</p>
+                        <ul class="list-disc pl-5 space-y-3">
+                            <li><strong>Explicit Parameter Specification:</strong> Include all relevant parameters for each G-code on every line. This eliminates ambiguity and simplifies troubleshooting.</li>
+                            <li><strong>Complete Line Definitions:</strong> Each line should contain the "N" line number, the G-code, and all necessary positional data (X, Y, Z, A, C, F, etc.). This makes the program self-explanatory and easier to analyze.</li>
+                        </ul>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Positioning Mode (Machine vs. Part)</h4>
+                        <p>The control operates in two primary coordinate modes. The post-processor must be configured to output code for the "Part Coordinate System" by default.</p>
+                        <ul class="list-disc pl-5 space-y-3">
+                            <li><strong>Part Coordinate System (<code>G54</code>):</strong> This is the <strong>default mode for all G-code programs</strong>. All <code>X</code>, <code>Y</code>, and <code>Z</code> coordinates in a standard <code>G00</code> or <code>G01</code> block are interpreted as absolute positions relative to the active work offset (<code>G54</code>), which is set by the operator. The post-processor must output all motion in this "Part" coordinate system.</li>
+                            <li><strong>Machine Coordinate System (<code>G500</code>):</strong> This is the absolute machine position. Moves in this system ignore all work offsets. This is only used for non-cutting moves, such as sending the machine to a safe home or tool change position.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- CARD 3 -->
+                <div id="ch3" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">3</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">File Structure & Formatting</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body">
+                        <p>The TarusNC control is compatible with various CAD/CAM systems, utilizing standard ISO G-code programming. Toolpath programs can be saved with either a <code>.CNC</code> or <code>.NC</code> file extension.</p>
+                        
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Program Structure</h4>
+                        <ul class="list-disc pl-5 space-y-3">
+                            <li><strong>Line Numbering:</strong> Each executable line (non-comment) must begin with an uppercase <code>N</code> followed by a sequential number (e.g., <code>N0001</code>, <code>N0002</code>). Number lines consecutively in increments of one, without gaps or "wrap-around" (do not restart numbering after <code>N9999</code>).</li>
+                            <li><strong>Code Format:</strong> Following the <code>N</code> and sequence number, include the G, M, T, or W code, along with relevant operation numbers and parameters. Place each G or M code on its own line. Do not combine multiple G or M codes on a single line. G, M, and T code numbers do not require a fixed length (e.g., <code>G1</code>, <code>G100</code> are both valid).</li>
+                            <li><strong>Program Termination:</strong> End the program with <code>M05</code> (spindle stop) followed by <code>M30</code> (program end).</li>
+                            <li><strong>Parameter Handling:</strong> All parameters default to zero. Parameters are modal, meaning they remain active until explicitly changed.</li>
+                        </ul>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Comment Handling</h4>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li>Comments can be initiated with a semicolon (<code>;</code>), asterisk (<code>*</code>), or left parenthesis (<code>(</code>).</li>
+                            <li>Parenthetical comments must be closed with a right parenthesis (<code>)</code>).</li>
+                            <li>Limit comment length to 255 characters.</li>
+                            <li>Comments following an <code>M01</code> (optional program stop) command will be displayed as a message, prompting user interaction to continue. This is useful for operator instructions or prompts.</li>
+                        </ul>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">Filename and Directory Requirements</h4>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li>Spaces or punctuation are not permitted. Use dashes (<code>-</code>) if necessary (e.g., <code>My-New-File.NC</code>).</li>
+                            <li>Filenames must be concise and descriptive and in <code>lowercase</code>.</li>
+                            <li>Version numbers or dates are not permitted in filenames.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- CARD 4 -->
+                <div id="ch4" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">4</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Kinematics & Transformations</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body">
+                        <h4 class="font-bold text-slate-800 mt-2 mb-2">Cartesian "Right Hand Rule" System</h4>
+                        <p>The direction an axis moves, and how all axes relate to each other on a machine tool is known as its “Cartesian Coordinate System”. On Tarus machines it is ALWAYS related to which way the cutter/spindle moves on the machine relative to the table or work piece. The “Rule” for this that Tarus machines use is called the “Right Hand Rule”.</p>
+
+                        <h4 class="font-bold text-slate-800 mt-6 mb-2">TRAORI</h4>
+                        <p>In the TarusNC control, TRAORI (Tool Rotary Axis Orientation) is always enabled. This constant activation allows for real-time compensation of machine inaccuracies, and maintains the validity of your defined tool, part, and head geometry parameters. If you use the <code>G500</code> command to move the machine to a safe “Machine” position, remember that TRAORI is temporarily deactivated. You must explicitly re-enable TRAORI following the <code>G500</code> command to restore the necessary compensation and parameter functionality.</p>
+                        
+                        <div class="mt-4 mb-4">
+                            <p class="font-bold text-slate-800">TRAORI / RTCP (Rotation around Tool Center Point) = ON</p>
+                            <p class="mb-2">This is how the machine will move with TRAORI active:</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <img src="rtcp 1st animation.gif" alt="RTCP ON Animation" class="w-full border border-slate-200 rounded-lg shadow-sm">
+                                <img src="rtcp1.jpeg" alt="RTCP ON Diagram" class="w-full border border-slate-200 rounded-lg shadow-sm">
+                            </div>
+                            <p class="text-sm italic mt-2 text-slate-500">"3+2” & continuous “5-axis” toolpaths created for 5-axis milling machines will automatically have the tool length and head rotations calculated by the CNC control during each move of an NC block.</p>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-8 mb-2">TRAFOOF</h4>
+                        <p>TarusNC programming utilizes <code>TRAFOOF</code>, <code>G500</code>, <code>D0</code>, and a safe position move within the Machine Coordinate System (MCS) as a safety action within the toolpath, deactivating transformations and frames. This sequence is standard for safety. If this safety sequence is used at the end of the toolpath, a recovery sequence is needed: <code>TRAORI</code>, <code>G54</code>, <code>D1</code>, <code>M05</code>, and <code>M30</code> to restore tool orientation, select the Part Coordinate System, recall tool data, stop the spindle, and terminate the program, respectively.</p>
+
+                        <h5 class="font-bold text-slate-700 mt-4 mb-2">Detailed Explanation:</h5>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li><strong>Purpose:</strong> To disable active transformations, like those used for 5-axis machining.</li>
+                            <li><strong>Function:</strong> Reverts the active coordinate system to the MCS.</li>
+                            <li><strong>Application:</strong> Used for safety before tool changes or to reset after complex movements.</li>
+                            <li><strong>Example:</strong> In 5-axis, <code>TRAFOOF</code> cancels the tool tip coordinate transformation, returning control to MCS based movements.</li>
+                            <li><strong>Related Commands:</strong> Used with transformation commands like <code>TRAORI</code>.</li>
+                        </ul>
+
+                        <div class="mt-6 mb-4">
+                            <p class="font-bold text-slate-800">TRAFOOF / RTCP = OFF</p>
+                            <p class="mb-2">This is how the machine will move with transformations disabled (e.g., when jogging in Machine mode):</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <img src="rtcp 2nd animation.gif" alt="RTCP OFF Animation" class="w-full border border-slate-200 rounded-lg shadow-sm">
+                                <img src="rtcp2.jpeg" alt="RTCP OFF Diagram" class="w-full border border-slate-200 rounded-lg shadow-sm">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 5 -->
+                <div id="ch5" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">5</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Tooling & Compensation Logic</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body">
+                        <h4 class="font-bold text-slate-800 mt-2 mb-2">Tool Length and Presetting Tools</h4>
+                        <p>At the CNC control, the operator must set up his <strong>Tool Selector</strong> settings for a particular cutter with <strong>AT LEAST</strong> the following parameters:</p>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li><strong>Tool Length</strong> - To the Tip of Tool</li>
+                            <li><strong>Corner Radius</strong> - The Corner Radius of the ballnose/bullnose cutter.</li>
+                        </ul>
+                        <p class="mt-4">These settings apply to ALL Ballnose and Bullnose cutters. Flat Endmill cutters do not need the "Corner Radius" parameter set (Corner Radius = 0).</p>
+                        <p>There is NO Corner Radius parameter found in the Tool Manager for a <strong>Ballnose cutter</strong>. The CNC software allows for the <strong>radius</strong> of the ball automatically in the tool length parameter. A Flat Endmill will have a <strong>0 in the Corner Radius</strong> field if it has a sharp/square corner.</p>
+                        <p>Once the tool is installed in the spindle and the <strong>Tool Length</strong> has been calculated, the machine can be <strong>preset</strong> to the workpiece.</p>
+                        <p>After presetting the tool is complete, the program can now be loaded into the CNC and <strong>executed</strong>.</p>
+
+                        <div class="mt-6 mb-6">
+                            <img src="millingoverview5axis.jpeg" alt="Diagram of Ballnose vs Bullnose cutter programming" class="w-full max-w-2xl mx-auto border border-slate-200 rounded-lg shadow-sm">
+                            <p class="text-center text-sm italic mt-2 text-slate-500">Reference: "Ballnose Cutter" and "Bullnose Cutter" programming logic</p>
+                        </div>
+                        
+                        <p>Standard methods of programming for these types of cutters are:</p>
+                        <ul class="list-disc pl-5 space-y-2">
+                            <li><strong>Ballnose Cutters:</strong> Programmed & Preset to "Center of Ball"</li>
+                            <li><strong>Bullnose Cutters:</strong> Programmed & Preset to "Center of Radius"</li>
+                            <li><strong>Flat Endmill Cutters:</strong> Programmed & Preset to "Tip of Tool"</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- CARD 6 -->
+                <div id="ch6" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">6</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Supported G Codes</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body no-progress">
+                        <h4 class="font-bold text-slate-800 mt-2 mb-2">Accepted Siemens G-Codes</h4>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-300 border border-slate-200 rounded-lg shadow-sm">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-1/3">Code</th>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-slate-200">
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">TRAORI</td><td class="px-4 py-3 text-sm text-slate-600">Enables RTCP, machine compensation, and tool data.</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">TRAFOOF</td><td class="px-4 py-3 text-sm text-slate-600">Disables RTCP, machine compensation, and tool data.</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">G54</td><td class="px-4 py-3 text-sm text-slate-600">Activates Work Coordinate System 1.</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">G500</td><td class="px-4 py-3 text-sm text-slate-600">Activates Machine Coordinate System.</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">D0</td><td class="px-4 py-3 text-sm text-slate-600">Deactivates tool length compensation.</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">D1</td><td class="px-4 py-3 text-sm text-slate-600">Activates tool length compensation.</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">G4 F(Time)</td><td class="px-4 py-3 text-sm text-slate-600">Pauses execution for the specified time.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-8 mb-2">Supported G Codes</h4>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-300 border border-slate-200 rounded-lg shadow-sm">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-1/3">Code / Category</th>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Description & Parameters</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-slate-200">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-mono font-bold text-slate-800 align-top">G00 G01<br><span class="text-xs text-slate-500 font-sans font-normal">Point to Point Execute</span></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600">
+                                            <strong>G00</strong> Point to Point Execute (Rapid)<br>
+                                            <strong>G01</strong> Point to Point Execute (Feedrate)<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">X, Y, Z, A, B, C</code> - End Points<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">F</code> - Feedrate
+                                        </td>
+                                    </tr>
+                                    <tr class="bg-slate-50">
+                                        <td class="px-4 py-3 text-sm font-mono font-bold text-slate-800 align-top">G02 G03<br><span class="text-xs text-slate-500 font-sans font-normal">Circle</span></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600">
+                                            <strong>G02</strong> Clockwise Circle<br>
+                                            <strong>G03</strong> Counter Clockwise Circle<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">X, Y, Z</code> - End Points<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">I, J</code> - Incremental Center<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">F</code> - Feedrate
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-mono font-bold text-slate-800 align-top">G500 G54<br><span class="text-xs text-slate-500 font-sans font-normal">Coordinate System</span></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600">
+                                            <strong>G500</strong> Machine Coordinate System<br>
+                                            <strong>G54</strong> Part Coordinate System<br>
+                                            <em class="text-xs">NOTE: Using different coordinate systems within TarusNC changes the part offsets, but those offsets are always applied to the G54 coordinate system within the Sinumerik control.</em>
+                                        </td>
+                                    </tr>
+                                    <tr class="bg-slate-50">
+                                        <td class="px-4 py-3 text-sm font-mono font-bold text-slate-800 align-top">G70 G71<br><span class="text-xs text-slate-500 font-sans font-normal">Scale</span></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600">
+                                            <strong>G70</strong> Scale - Inch<br>
+                                            <strong>G71</strong> Scale - Millimeter
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm font-mono font-bold text-slate-800 align-top">G621-G626<br><span class="text-xs text-slate-500 font-sans font-normal">Go To User Clearance</span></td>
+                                        <td class="px-4 py-3 text-sm text-slate-600">
+                                            <strong>G621</strong> Go to X User Clearance Position<br>
+                                            <strong>G622</strong> Go to Y User Clearance Position<br>
+                                            <strong>G623</strong> Go to Z User Clearance Position<br>
+                                            <strong>G624</strong> Go to A User Clearance Position<br>
+                                            <strong>G625</strong> Go to B User Clearance Position<br>
+                                            <strong>G626</strong> Go to C User Clearance Position<br>
+                                            <code class="text-xs bg-slate-100 px-1 py-0.5 rounded">F</code> - Feedrate (should be used with G621 – G626)<br>
+                                            <em class="text-xs">(After any of these G Codes it will clear the modal position of the respective axis)</em>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 7 -->
+                <div id="ch7" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">7</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Supported M Codes</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body no-progress">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-300 border border-slate-200 rounded-lg shadow-sm">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider w-1/4">Code</th>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-slate-200">
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M00</td><td class="px-4 py-3 text-sm text-slate-600">Program Stop</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M01</td><td class="px-4 py-3 text-sm text-slate-600">Optional Stop/Program Pause (Display comments after stop)</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M03</td><td class="px-4 py-3 text-sm text-slate-600">Spindle On CW (S# = RPM)</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M04</td><td class="px-4 py-3 text-sm text-slate-600">Spindle On CCW (S# = RPM)</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M05</td><td class="px-4 py-3 text-sm text-slate-600">Spindle Off</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M06</td><td class="px-4 py-3 text-sm text-slate-600">Tool Change (T# = Tool number in Tool Selector)</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M07</td><td class="px-4 py-3 text-sm text-slate-600">Air On</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M08</td><td class="px-4 py-3 text-sm text-slate-600">Coolant On</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M09</td><td class="px-4 py-3 text-sm text-slate-600">Air and Coolant Off</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M16</td><td class="px-4 py-3 text-sm text-slate-600">Tool Change (Gundrill Only - T# = Tool number in Tool Selector)</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M18</td><td class="px-4 py-3 text-sm text-slate-600">Gundrill Oil Off (Only works with G81)</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M52</td><td class="px-4 py-3 text-sm text-slate-600">Through Spindle Coolant On</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M53</td><td class="px-4 py-3 text-sm text-slate-600">Through Spindle Coolant Off</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M104</td><td class="px-4 py-3 text-sm text-slate-600">Tool Frame On</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M105</td><td class="px-4 py-3 text-sm text-slate-600">Tool Frame Off (Part Frame On)</td></tr>
+                                    <tr class="bg-slate-50"><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M106</td><td class="px-4 py-3 text-sm text-slate-600">Start Timer</td></tr>
+                                    <tr><td class="px-4 py-3 text-sm font-mono font-bold text-slate-800">M107</td><td class="px-4 py-3 text-sm text-slate-600">Wait for Timer</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 8 -->
+                <div id="ch8" class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <span class="text-3xl font-black mr-4 opacity-50 editable-num">8</span>
+                        <h3 class="text-lg font-bold editable-title flex-1">Example Programs</h3>
+                    </div>
+                    <div class="p-6 text-slate-600 space-y-4 editable-body no-progress">
+                        
+                        <h4 class="font-bold text-slate-800 mt-2">Example 3 Axis Milling</h4>
+                        <p class="text-sm">Program utilizing <code>TRAORI</code>, <code>PCS</code>. This example file provides a template for configuring your CAD/CAM postprocessor to generate accurate toolpaths for a TarusNC control, specifically for toolpaths that maintain TRAORI (Tool Rotary Axis Orientation) within the Part Coordinate System.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; ******** TOOL CHANGE ********* 
+N0003; T0007 40-201 FLAT CUTTER D20 - MANU: D=20 L=110 ANGLE=0 
+N0004; TOOL LENGTH REFERENCE=TIP 
+N0005G71
+N0006M6T7
+N0007M3S2387
+N0008 TRAORI
+N0009G54
+N0010G0X-132.0677Y-146.2150
+N0011G0X-132.0677Y-146.2150A0C0
+N0012G0X-132.0677Y-146.2150Z150
+N0013; ***** 1. TOOL PATH ****** 
+N0014; JOB COMMENT :  
+N0015; LAYER NAME :  
+N0016; WALL THICKNESS=0.00 OFFSET=0.00 OPERATION = MCONT TIP 
+N0017; SILHOUETTE BLANK VERTICAL 
+N0018G0X-132.0677Y-146.2150Z100A0C0
+N0019G1X-132.0677Y-146.2150Z100A0C0F6000
+N0020X-131.4785Y-145.5717Z100A0C0F6000
+N0021X-130.9475Y-144.8795Z100A0C0F6000
+N0022X-130.4789Y-144.1436Z100A0C0F6000
+N0023X-130.0762Y-143.3697Z100A0C0F6000
+N0024X-129.7425Y-142.5637Z100A0C0F6000
+N0025X39.7372Y-39.8724Z85.0922A0C0F6000
+N0026X39.7081Y-39.6907Z85.1322A0C0F6000
+N0027X39.6344Y-39.5236Z85.1778A0C0F6000
+N0028X39.5207Y-39.3815Z85.2263A0C0F6000
+N0029X38.4196Y-38.3231Z85.6354A0C0F6000
+N0030G0X42.4459Y-42.3494Z106.8858A0C0
+N0031X42.4459Y-42.3494Z150A0C0
+N0032M5
+N0033M30</code></pre>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6">Example 3+2 Milling Program</h4>
+                        <p class="text-sm">Program utilizing <code>TRAORI</code>, <code>PCS</code>. This example file provides a template for configuring your CAD/CAM postprocessor to generate accurate toolpaths for a TarusNC control, specifically for toolpaths that maintain TRAORI (Tool Rotary Axis Orientation) within the Part Coordinate System.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; ******** TOOL CHANGE ********* 
+N0003; T0007 40-201 FLAT CUTTER D20 - MANU: D=20 L=110 ANGLE=0 
+N0004; TOOL LENGTH REFERENCE=TIP 
+N0005G71
+N0006M6T7
+N0007M3S2387
+N0008 TRAORI
+N0009G54
+N0010G0X-132.0677Y-146.2150Z150
+N0011X-132.0677Y-146.2150Z150A-45C0
+N0012X-132.0677Y-146.2150Z150A-45C0
+N0013; ***** 1. TOOL PATH ****** 
+N0014; JOB COMMENT :  
+N0015; LAYER NAME :  
+N0016; WALL THICKNESS=0.00 OFFSET=0.00 OPERATION = MCONT TIP 
+N0017; SILHOUETTE BLANK VERTICAL 
+N0018G0X-132.0677Y-146.2150Z100A-45C0
+N0019G1X-132.0677Y-146.2150Z100A-45C0F6000
+N0020X-131.4785Y-145.5717Z100A-45C0F6000
+N0021X-130.9475Y-144.8795Z100A-45C0F6000
+N0022X-130.4789Y-144.1436Z100A-45C0F6000
+N0023X-130.0762Y-143.3697Z100A-45C0F6000
+N0024X-129.7425Y-142.5637Z100A-45C0F5730
+N0025X39.7372Y-39.8724Z85.0922A-45C0F6000
+N0026X39.7081Y-39.6907Z85.1322A-45C0F6000
+N0027X39.6344Y-39.5236Z85.1778A-45C0F6000
+N0028X39.5207Y-39.3815Z85.2263A-45C0F6000
+N0029X38.4196Y-38.3231Z85.6354A-45C0F6000
+N0030G0X42.4459Y-42.3494Z106.8858A-45C0
+N0031X42.4459Y-42.3494Z150A-45C0
+N0032M5
+N0033M30</code></pre>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6">Example 5 Axis Milling</h4>
+                        <p class="text-sm">Program utilizing <code>TRAORI</code>, <code>PCS</code>. This example file provides a template for configuring your CAD/CAM postprocessor to generate accurate toolpaths for a TarusNC control, specifically for toolpaths that maintain TRAORI (Tool Rotary Axis Orientation) within the Part Coordinate System.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; ******** TOOL CHANGE ********* 
+N0003; T0008 60-100 BALL CUTTER D10: D=10 L=75 ANGLE=0 
+N0004; TOOL LENGTH REFERENCE=CENTER 
+N0005G71
+N0006M6T8
+N0007M3S2387
+N0008 TRAORI
+N0009G54
+N0010; ***** 15. TOOL PATH ****** 
+N0011; JOB COMMENT  : 5AX - SIMULTANOUS FINE ROUGHING REAR 
+N0012; LAYER NAME    : 16 5AX - SIMULTANOUS FINE ROUGHING REAR 
+N0013; WALL THICKNESS=0.00 OFFSET=0.30 STEP=1.80 LACE CUT CENTER 
+N0014G0X75.7170Y91.7204Z114.9383A-12.4856C-25.0144
+N0015X74.2884Y89.1971Z100.2212A-12.4856C-25.0144
+N0016G1X73.8122Y88.3561Z95.3155A-12.4856C-25.0144F3724
+N0017X74.6986Y88.6038Z94.9245A-12.4856C-25.0144F3724
+N0018X75.6365Y88.8654Z94.5410A-12.4478C-25.1415F3724
+N0019X76.5921Y89.1307Z94.2100A-12.3344C-25.5225F3724
+N0020X77.5623Y89.3989Z93.9324A-12.1455C-26.1574F3724
+N0021X78.5442Y89.6694Z93.7089A-11.8811C-27.0462F3724
+N0022X79.5343Y89.9413Z93.5400A-11.5410C-28.1888F3724
+N0023X-74.0950Y125.1899Z88.8888A-17.9047C-14.0920F3724
+N0024X-75.0831Y124.9479Z89.1233A-17.9288C-14.1802F3724
+N0025X-76.0627Y124.7235Z89.4090A-17.9461C-14.2432F3724
+N0026X-77.0313Y124.5172Z89.7451A-17.9564C-14.2810F3724
+N0027X-77.9861Y124.3297Z90.1306A-17.9599C-14.2936F3724
+N0028X-78.8905Y124.1597Z90.5221A-17.9599C-14.2936F3724
+N0029G0X-77.4243Y130.1080Z109.5606A-17.9599C-14.2936
+N0030X-77.4243Y130.1080Z150A-17.9599C-14.2936
+N0031M5
+N0032M30</code></pre>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6">Example 3 Axis Milling</h4>
+                        <p class="text-sm">Program utilizing <code>TRAFOOF</code>, <code>G500</code>, <code>D0</code>, MCS Safe Position. This template configures a CAD/CAM postprocessor for TarusNC controls, demonstrating safe machine pre/post-positioning within the MCS. The procedure uses TRAFOOF, G500, and D0 to disable TRAORI, select the MCS, and cancel tool length compensation, respectively. A safe MCS position move follows. The recovery sequence (TRAORI, G54, D1, M03/M05, M30) is consistent across operation transitions and program completion.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; PP-NAME: SINUMERIK 1 PP FILE: D:\ ACCEPTANCE5006.NC 
+N0003G71
+N0004 TRAFOOF
+N0005G500
+N0006 D0
+N0007G0Z-10
+N0008G0Z-10A0C0
+N0009; ******* TOOL CHANGE ********* 
+N0010; T0007 40-201 FLAT CUTTER D20 TOOL LENGTH REFERENCE=TIP 
+N0011M0
+N0012M6T7
+N0013 D0
+N0014G0Z-10
+N0015G0Z-10
+N0016M3S2387
+N0017 TRAORI
+N0018G54
+N0019 D1
+N0020G0X-132.0677Y-146.2150
+N0021G0X-132.0677Y-146.2150
+N0022G0X-132.0677Y-146.2150Z150
+N0023; ***** 1. TOOL PATH ****** 
+N0024G0X-132.0677Y-146.2150Z100A0C0
+N0025G1X-132.0677Y-146.2150Z100A0C0F6000
+N0026X-131.4785Y-145.5717Z100A0C0F6000
+N0027X-145.5691Y-131.4857Z100A0C0F6000
+N0028X-146.2122Y-132.0752Z100A0C0F6000
+N0029G0X-146.2122Y-132.0752Z150A0C0
+N0030 TRAFOOF
+N0031G500
+N0032 D0
+N0033G0Z-10F6000
+N0034G0Z-10
+N0035 TRAORI
+N0036G54
+N0037 D1
+N0038M5
+N0039M30</code></pre>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6">Example 3+2 Milling Program</h4>
+                        <p class="text-sm">Program utilizing <code>TRAFOOF</code>, <code>G500</code>, <code>D0</code>, MCS Safe Position. This template configures a CAD/CAM postprocessor for TarusNC controls, demonstrating safe machine pre/post-positioning within the MCS. The procedure uses TRAFOOF, G500, and D0 to disable TRAORI, select the MCS, and cancel tool length compensation, respectively. A safe MCS position move follows. The recovery sequence (TRAORI, G54, D1, M03/M05, M30) is consistent across operation transitions and program completion.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; PP-NAME: SINUMERIK 1 PP FILE: D:\ ACCEPTANCE5006.NC 
+N0003G71
+N0004 TRAFOOF
+N0005G500
+N0006 D0
+N0007G0Z-10
+N0008G0Z-10A0C0
+N0009; ******* TOOL CHANGE ********* 
+N0010; T0007 40-201 FLAT CUTTER D20 TOOL LENGTH REFERENCE=TIP 
+N0011M0
+N0012M6T7
+N0013 D0
+N0014G0Z-10
+N0015G0Z-10A-45
+N0016M3S2387
+N0017 TRAORI
+N0018G54
+N0019 D1
+N0020G0X-132.0677Y-146.2150
+N0021G0X-132.0677Y-146.2150
+N0022G0X-132.0677Y-146.2150Z150
+N0023; ***** 1. TOOL PATH ****** 
+N0024G0X-132.0677Y-146.2150Z100A-45C0
+N0025G1X-132.0677Y-146.2150Z100A-45C0F6000
+N0026X-131.4785Y-145.5717Z100A-45C0F6000
+N0027X-145.5691Y-131.4857Z100A-45C0F6000
+N0028X-146.2122Y-132.0752Z100A-45C0F6000
+N0029G0X-146.2122Y-132.0752Z150A-45C0
+N0030 TRAFOOF
+N0031G500
+N0032 D0
+N0033G0Z-10F6000
+N0034G0Z-10A0
+N0035 TRAORI
+N0036G54
+N0037 D1
+N0038M5
+N0039M30</code></pre>
+                        </div>
+
+                        <h4 class="font-bold text-slate-800 mt-6">Example 5 Axis Milling Program</h4>
+                        <p class="text-sm">Program utilizing <code>TRAFOOF</code>, <code>G500</code>, <code>D0</code>, MCS Safe Position. This template configures a CAD/CAM postprocessor for TarusNC controls, demonstrating safe machine pre/post-positioning within the MCS. The procedure uses TRAFOOF, G500, and D0 to disable TRAORI, select the MCS, and cancel tool length compensation, respectively. A safe MCS position move follows. The recovery sequence (TRAORI, G54, D1, M03/M05, M30) is consistent across operation transitions and program completion.</p>
+                        <div class="relative group mt-3 mb-8">
+                            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-slate-800 text-slate-300 px-3 py-1.5 rounded-md text-xs font-bold hover:bg-slate-700 transition shadow-sm z-10">Copy</button>
+                            <pre class="bg-[#15171c] text-slate-300 p-5 rounded-xl overflow-x-auto text-sm font-mono border border-slate-800 shadow-inner"><code>N0001;TARUSNC PROCESSED
+N0002; PP-NAME: SINUMERIK 1 PP FILE: D:\ ACCEPTANCE5006.NC 
+N0003G71
+N0004 TRAFOOF
+N0005G500
+N0006 D0
+N0007G0Z-10
+N0008G0Z-10A-12.4856C-25.0144
+N0009 TRAORI
+N0010G54
+N0011 D1
+N0012G0X75.7170Y91.7204
+N0013G0X75.7170Y91.7204
+N0014G0X75.7170Y91.7204Z157.7559
+N0015; ***** 15. TOOL PATH ****** 
+N0016G0X75.7170Y91.7204Z114.9383A-12.4856C-25.0144
+N0017X74.2884Y89.1971Z100.2212A-12.4856C-25.0144
+N0018G1X73.8122Y88.3561Z95.3155A-12.4856C-25.0144F6000
+N0019X74.6986Y88.6038Z94.9245A-12.4856C-25.0144F6000
+N0020X75.6365Y88.8654Z94.5410A-12.4478C-25.1415F6000
+N0021X76.5921Y89.1307Z94.2100A-12.3344C-25.5225F6000
+N0022X77.5623Y89.3989Z93.9324A-12.1455C-26.1574F6000
+N0023X-76.0627Y124.7235Z89.4090A-17.9461C-14.2432F6000
+N0024X-77.0313Y124.5172Z89.7451A-17.9564C-14.2810F6000
+N0025X-77.9861Y124.3297Z90.1306A-17.9599C-14.2936F6000
+N0026X-78.8905Y124.1597Z90.5221A-17.9599C-14.2936F6000
+N0027G0X-77.4243Y130.1080Z109.5606A-17.9599C-14.2936
+N0028X-77.4243Y130.1080Z157.0704A-17.9599C-14.2936
+N0029 TRAFOOF
+N0030G500
+N0031 D0
+N0032G0Z-10F6000
+N0033G0Z-10A0C0
+N0034 TRAORI
+N0035G54
+N0036 D1
+N0037M5
+N0038M30</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ACTIVITY LOG TAB (MANDATORY) -->
+            <div id="tab-activity" class="tab-content">
+                <span class="badge">Records</span>
+                <h2 class="text-3xl font-black text-slate-900 mb-8 tracking-tight">Activity & Revision Log</h2>
+                <div class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 relative">
+                    <div class="bg-primary-600 text-white p-4 flex items-center card-header">
+                        <svg class="w-6 h-6 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h3 class="text-lg font-bold flex-1">Document History</h3>
+                        <button onclick="unlockActivityLog()" class="injected-tool text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full shadow border border-white/30 font-bold transition ml-2">Admin Edit</button>
+                    </div>
+                    <div class="p-0 text-slate-600 text-sm">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200">
+                                        <th class="px-6 py-3 text-xs uppercase font-bold text-slate-500 w-28">Date</th>
+                                        <th class="px-6 py-3 text-xs uppercase font-bold text-slate-500 w-32">Editor</th>
+                                        <th class="px-6 py-3 text-xs uppercase font-bold text-slate-500 w-auto">Changes Made</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activity-table-body" class="divide-y divide-slate-100">
+                                    <tr class="hover:bg-slate-50 transition-colors align-top">
+                                        <td class="px-6 py-4 font-mono text-xs whitespace-nowrap pt-5">Today</td>
+                                        <td class="px-6 py-4 font-bold text-primary-700 pt-5">Admin</td>
+                                        <td class="px-6 py-4 activity-cell pt-5">
+                                            <ul class="space-y-2">
+                                                <li>Converted original guide into unified Master Template format.</li>
+                                                <li>Configured Tarus Corporate Carbon aesthetic logic.</li>
+                                                <li>Mapped G and M codes to data tables.</li>
+                                                <li>Removed all checkbox functionality and updated tolerancing/positioning logic.</li>
+                                                <li>Added chapter sub-navigation to LCMT sidebar.</li>
+                                            </ul>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="promptAdminActivity()" class="injected-tool w-full py-4 border-2 border-dashed border-primary-300 text-primary-600 rounded-2xl hover:bg-primary-50 transition font-bold flex justify-center items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> Add Activity Entry
+                </button>
+            </div>
+
+            <!-- TUTORIAL TAB (MANDATORY) -->
+            <div id="tab-tutorial" class="tab-content">
+                <span class="badge">Help</span>
+                <h2 class="text-3xl font-black text-slate-900 mb-8 tracking-tight">Editor Tutorial & Manual</h2>
+                <div class="bg-white rounded-2xl shadow-md overflow-hidden mb-6">
+                    <div class="bg-slate-800 text-white p-4 flex items-center card-header"><h3 class="text-lg font-bold">How to Edit the Master Guide</h3></div>
+                    <div class="p-6 text-slate-600 space-y-4">
+                        <ol class="list-decimal pl-5 space-y-3">
+                            <li><strong>Turn on Edit Mode:</strong> Click the <span class="ui">Enable Edit Mode</span> button in the bottom left corner of the sidebar.</li>
+                            <li><strong>Modify an Existing Step:</strong> Hover over any card, click <span class="ui bg-slate-800 text-white px-2 py-1 rounded shadow">Edit</span> to begin typing. Click <span class="ui bg-slate-900 text-white px-2 py-1 rounded shadow">Save</span> when done.</li>
+                            <li><strong>Manage List Items:</strong> Click inside any list step. Use the floating formatting toolbar to <strong>+ Step</strong>, <strong>Move &uarr;/&darr;</strong>, or <strong>Delete</strong> that specific line instantly!</li>
+                            <li><strong>Log Your Activity:</strong> Navigate to the <span class="ui">Activity Log</span> tab, click "Admin Edit" (Password: Passme12).</li>
+                            <li><strong>Save Your Work:</strong> Click the <span class="ui bg-primary-600 text-white px-2 py-1 rounded shadow">Save Master Guide</span> button to download a brand new HTML file.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- UI Overlays -->
+    <div id="format-toolbar" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full shadow-2xl flex flex-wrap justify-center items-center gap-x-2 gap-y-1 z-50 transition-all duration-300 translate-y-20 opacity-0 hidden w-[95%] sm:w-auto">
+        <span class="text-xs font-bold text-slate-400 mr-2 hidden sm:inline">Format:</span>
+        <button onclick="execCmd('bold')" class="px-2 py-1 hover:bg-slate-700 rounded font-bold" title="Bold">B</button>
+        <button onclick="execCmd('italic')" class="px-2 py-1 hover:bg-slate-700 rounded italic" title="Italic">I</button>
+        <button onclick="execCmd('insertUnorderedList')" class="px-2 py-1 hover:bg-slate-700 rounded text-sm" title="Bullet List">&bull; List</button>
+        <div class="w-px h-4 bg-slate-700 mx-1"></div>
+        <button onclick="wrapTag('val')" class="px-2 py-1 hover:bg-slate-700 rounded text-xs" title="Highlight Value"><span class="val pointer-events-none">Value</span></button>
+        <button onclick="wrapTag('ui')" class="px-2 py-1 hover:bg-slate-700 rounded text-xs" title="Bold UI Element"><span class="ui pointer-events-none text-white">UI Element</span></button>
+        <button onclick="wrapTag('kbd')" class="px-2 py-1 hover:bg-slate-700 rounded text-xs" title="Keyboard Key"><kbd class="pointer-events-none">Key</kbd></button>
+        <div class="w-px h-4 bg-slate-700 mx-1 hidden sm:block"></div>
+        <span class="text-[10px] text-slate-400 mr-1 uppercase tracking-wider font-bold hidden sm:inline">Step:</span>
+        <button onclick="addListItem()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-bold shadow" title="Add Step">+ Step</button>
+        <button onclick="moveListItem(-1)" class="px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded text-xs shadow" title="Move Step Up">&uarr;</button>
+        <button onclick="moveListItem(1)" class="px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded text-xs shadow" title="Move Step Down">&darr;</button>
+        <button onclick="deleteListItem()" class="px-2 py-1 bg-red-900 hover:bg-red-800 rounded text-xs shadow" title="Delete Step">Del</button>
+    </div>
+
+    <!-- REQUIRED JAVASCRIPT (DO NOT ALTER) -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() { initEditTools(); });
+
+        // PASTE INTERCEPTOR: Prevents junk code from being injected when pasting
+        document.addEventListener('paste', function(e) {
+            if (e.target.closest('[contenteditable="true"]')) {
+                e.preventDefault();
+                const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+                document.execCommand('insertText', false, text);
+            }
+        });
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('-translate-x-full'); document.getElementById('sidebarBackdrop').classList.toggle('hidden'); }
+        function switchTab(tabId) { document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active')); document.querySelectorAll('.nav-link').forEach(link => { link.classList.remove('bg-primary-600', 'text-white', 'shadow-md', 'bg-slate-950'); link.classList.add('text-slate-400'); if(link.innerText.includes("Tutorial")) { link.classList.remove('text-slate-400'); link.classList.add('text-primary-300', 'bg-slate-950'); } }); document.getElementById(tabId).classList.add('active'); const clickedBtn = document.querySelector(`button[onclick="switchTab('${tabId}')"]`); if(clickedBtn) { if(tabId === 'tab-tutorial') { clickedBtn.classList.replace('text-primary-300', 'text-white'); clickedBtn.classList.replace('bg-slate-950', 'bg-primary-600'); } else { clickedBtn.classList.remove('text-slate-400'); clickedBtn.classList.add('bg-primary-600', 'text-white', 'shadow-md'); } } document.querySelector('main').scrollTop = 0; if (window.innerWidth < 768) { const sidebar = document.getElementById('sidebar'); if (sidebar && !sidebar.classList.contains('-translate-x-full')) { sidebar.classList.add('-translate-x-full'); document.getElementById('sidebarBackdrop').classList.add('hidden'); } } }
+        function toggleGlobalEditMode() { document.body.classList.toggle('edit-mode'); const isEdit = document.body.classList.contains('edit-mode'); const btn = document.getElementById('editModeToggle'); const dlBtn = document.getElementById('downloadGuideBtn'); const expBtn = document.getElementById('exportFieldGuideBtn'); const toolbar = document.getElementById('format-toolbar'); if (isEdit) { btn.innerHTML = 'Disable Edit Mode'; btn.classList.replace('bg-slate-800', 'bg-slate-950'); btn.classList.replace('hover:bg-slate-700', 'hover:bg-slate-900'); dlBtn.classList.remove('hidden'); expBtn.classList.remove('hidden'); toolbar.classList.remove('hidden'); } else { btn.innerHTML = 'Enable Edit Mode'; btn.classList.replace('bg-slate-950', 'bg-slate-800'); btn.classList.replace('hover:bg-slate-900', 'hover:bg-slate-700'); dlBtn.classList.add('hidden'); expBtn.classList.add('hidden'); const activityTable = document.getElementById('activity-table-body'); if (activityTable && activityTable.classList.contains('is-editing-log')) { activityTable.classList.remove('is-editing-log'); activityTable.querySelectorAll('td[contenteditable]').forEach(td => { td.removeAttribute('contenteditable'); td.classList.remove('bg-white', 'shadow-inner', 'ring-1', 'ring-slate-300', 'rounded-md', 'outline-none'); }); } toolbar.classList.remove('translate-y-0', 'opacity-100'); toolbar.classList.add('translate-y-20', 'opacity-0'); setTimeout(() => toolbar.classList.add('hidden'), 300); document.querySelectorAll('.is-editing').forEach(el => toggleEditCard(el.querySelector('.edit-btn'))); } }
+        function initEditTools() { document.querySelectorAll('.tab-content .step-card').forEach(card => { card.classList.add('relative'); if(card.querySelector('.edit-tools')) return; let toolsHTML = `<div class="space-x-1 flex"><button onclick="moveCard(this, -1)" class="bg-slate-700 text-white px-2 py-1 rounded text-xs shadow hover:bg-slate-600">&uarr;</button><button onclick="moveCard(this, 1)" class="bg-slate-700 text-white px-2 py-1 rounded text-xs shadow hover:bg-slate-600">&darr;</button><button onclick="toggleEditCard(this)" class="bg-slate-800 text-white px-2 py-1 rounded text-xs shadow edit-btn hover:bg-slate-700">Edit</button><button onclick="deleteCard(this)" class="bg-red-900 text-white px-2 py-1 rounded text-xs shadow hover:bg-red-800">Delete</button></div>`; const tools = document.createElement('div'); tools.className = 'edit-tools injected-tool absolute top-3 right-4 z-20 flex items-center'; tools.innerHTML = toolsHTML; card.insertBefore(tools, card.firstChild); if(card.classList.contains('bg-white')) { const ht = card.querySelector('h3'); if(ht) ht.classList.add('editable-title'); const b = card.querySelector('.p-6'); if(b) b.classList.add('editable-body'); const ns = card.querySelector('.opacity-50'); if(ns) ns.classList.add('editable-num'); } else { const ht = card.querySelector('h4'); if(ht) ht.classList.add('editable-title'); const b = card.querySelector('.text-sm'); if(b) b.classList.add('editable-body'); } }); document.querySelectorAll('.tab-content:not(#tab-tutorial):not(#tab-activity)').forEach(tab => { if(tab.querySelector('.add-btns-container')) return; const btnContainer = document.createElement('div'); btnContainer.className = 'injected-tool flex flex-wrap gap-4 mt-6 add-btns-container'; btnContainer.innerHTML = `<button class="flex-1 min-w-[120px] py-3 border-2 border-dashed border-slate-400 text-slate-500 rounded-xl hover:bg-slate-200 hover:text-slate-800 transition font-bold text-xs" onclick="addNewStep(this.closest('.tab-content'))">+ Step Card</button><button class="flex-1 min-w-[120px] py-3 border-2 border-dashed border-primary-300 text-primary-600 rounded-xl hover:bg-primary-50 hover:text-primary-800 transition font-bold text-xs" onclick="addInfoBlock(this.closest('.tab-content'))">+ Info Box</button><button class="flex-1 min-w-[120px] py-3 border-2 border-dashed border-slate-300 text-slate-600 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition font-bold text-xs" onclick="addNoteBlock(this.closest('.tab-content'))">+ Note Box</button><button class="flex-1 min-w-[120px] py-3 border-2 border-dashed border-red-300 text-red-500 rounded-xl hover:bg-red-50 hover:text-red-800 transition font-bold text-xs" onclick="addWarningBlock(this.closest('.tab-content'))">+ Warning Box</button>`; tab.appendChild(btnContainer); }); }
+        function toggleEditCard(btn) { const card = btn.closest('.step-card'); const title = card.querySelector('.editable-title'); const body = card.querySelector('.editable-body'); const num = card.querySelector('.editable-num'); const isEditing = card.classList.toggle('is-editing'); const toolbar = document.getElementById('format-toolbar'); if (isEditing) { btn.innerText = 'Save'; btn.classList.replace('bg-slate-800', 'bg-slate-900'); btn.classList.replace('hover:bg-slate-700', 'hover:bg-slate-800'); if(title) title.contentEditable = "true"; if(body) body.contentEditable = "true"; if(num) num.contentEditable = "true"; toolbar.classList.remove('translate-y-20', 'opacity-0'); toolbar.classList.add('translate-y-0', 'opacity-100'); } else { btn.innerText = 'Edit'; btn.classList.replace('bg-slate-900', 'bg-slate-800'); btn.classList.replace('hover:bg-slate-800', 'hover:bg-slate-700'); if(title) title.contentEditable = "false"; if(body) body.contentEditable = "false"; if(num) num.contentEditable = "false"; if(document.querySelectorAll('.is-editing').length === 0 && !document.querySelector('.is-editing-log')) { toolbar.classList.remove('translate-y-0', 'opacity-100'); toolbar.classList.add('translate-y-20', 'opacity-0'); } } }
+        function getSelectedLI() { const sel = window.getSelection(); if(sel.rangeCount > 0) { let node = sel.anchorNode; if(node.nodeType === 3) node = node.parentNode; return node.closest('li'); } return null; }
+        function addListItem() { const li = getSelectedLI(); if(li) { const newLi = document.createElement('li'); newLi.innerHTML = "New step..."; li.parentNode.insertBefore(newLi, li.nextSibling); } else { alert("Click inside an existing list first."); } }
+        function moveListItem(direction) { const li = getSelectedLI(); if(li) { if(direction === -1 && li.previousElementSibling) { li.parentNode.insertBefore(li, li.previousElementSibling); } else if(direction === 1 && li.nextElementSibling) { li.parentNode.insertBefore(li.nextElementSibling, li); } } }
+        function deleteListItem() { const li = getSelectedLI(); if(li && confirm("Delete this step?")) li.remove(); }
+        function moveCard(btn, direction) { const card = btn.closest('.step-card'); if (!card) return; if (direction === -1) { const prev = card.previousElementSibling; if (prev && prev.classList.contains('step-card')) { card.parentNode.insertBefore(card, prev); card.scrollIntoView({behavior: "smooth", block: "center"}); } } else { const next = card.nextElementSibling; if (next && next.classList.contains('step-card')) { card.parentNode.insertBefore(next, card); card.scrollIntoView({behavior: "smooth", block: "center"}); } } }
+        function deleteCard(btn) { if(confirm("Delete this block?")) { btn.closest('.step-card').remove(); if(document.querySelectorAll('.is-editing').length === 0 && !document.querySelector('.is-editing-log')) { document.getElementById('format-toolbar').classList.add('translate-y-20', 'opacity-0'); document.getElementById('format-toolbar').classList.remove('translate-y-0', 'opacity-100'); } } }
+        function addNewStep(tabElement) { const stepHTML = `<div class="bg-white rounded-2xl shadow-md overflow-hidden mb-6 step-card relative"><div class="bg-primary-600 text-white p-4 flex items-center card-header"><span class="text-3xl font-black mr-4 opacity-50 editable-num">#</span><h3 class="text-lg font-bold editable-title flex-1">New Step</h3></div><div class="p-6 text-slate-600 space-y-4 editable-body"><ol class="list-decimal pl-5 space-y-2"><li>Task</li></ol></div></div>`; const tempDiv = document.createElement('div'); tempDiv.innerHTML = stepHTML.trim(); const newCard = tempDiv.firstChild; tabElement.insertBefore(newCard, tabElement.querySelector('.add-btns-container')); initEditTools(); setTimeout(() => { toggleEditCard(newCard.querySelector('.edit-btn')); newCard.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }
+        function addInfoBlock(tabElement) { const blockHTML = `<div class="bg-primary-50 border border-primary-200 border-l-4 border-l-primary-600 p-5 rounded-lg shadow-sm mb-6 step-card relative"><div class="flex justify-between items-start mb-1"><h4 class="font-bold text-primary-800 flex items-center editable-title"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Info</h4></div><div class="text-sm text-primary-900 editable-body"><p>Details here...</p></div></div>`; const tempDiv = document.createElement('div'); tempDiv.innerHTML = blockHTML.trim(); const newBlock = tempDiv.firstChild; tabElement.insertBefore(newBlock, tabElement.querySelector('.add-btns-container')); initEditTools(); setTimeout(() => { toggleEditCard(newBlock.querySelector('.edit-btn')); newBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }
+        function addNoteBlock(tabElement) { const blockHTML = `<div class="bg-slate-100 border border-slate-200 border-l-4 border-l-slate-500 p-5 rounded-lg shadow-sm mb-6 step-card relative"><div class="flex justify-between items-start mb-1"><h4 class="font-bold text-slate-800 flex items-center editable-title"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>Note</h4></div><div class="text-sm text-slate-700 editable-body"><p>General note here...</p></div></div>`; const tempDiv = document.createElement('div'); tempDiv.innerHTML = blockHTML.trim(); const newBlock = tempDiv.firstChild; tabElement.insertBefore(newBlock, tabElement.querySelector('.add-btns-container')); initEditTools(); setTimeout(() => { toggleEditCard(newBlock.querySelector('.edit-btn')); newBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }
+        function addWarningBlock(tabElement) { const blockHTML = `<div class="bg-red-50 border border-red-200 border-l-4 border-l-red-600 p-5 rounded-lg shadow-sm mb-6 step-card relative"><div class="flex justify-between items-start mb-1"><h4 class="font-bold text-red-800 flex items-center editable-title"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>Warning</h4></div><div class="text-sm text-red-900 editable-body"><p>Details here...</p></div></div>`; const tempDiv = document.createElement('div'); tempDiv.innerHTML = blockHTML.trim(); const newBlock = tempDiv.firstChild; tabElement.insertBefore(newBlock, tabElement.querySelector('.add-btns-container')); initEditTools(); setTimeout(() => { toggleEditCard(newBlock.querySelector('.edit-btn')); newBlock.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); }
+        
+        function unlockActivityLog() { if(prompt("Enter Admin Password:") === "Passme12") { const tbody = document.getElementById('activity-table-body'); tbody.classList.add('is-editing-log'); tbody.querySelectorAll('tr').forEach(tr => { if(tr.children.length >= 3) { tr.children[1].contentEditable = "true"; tr.children[1].classList.add('bg-white', 'shadow-inner', 'ring-1', 'ring-slate-300', 'rounded-md', 'outline-none'); tr.children[2].contentEditable = "true"; tr.children[2].classList.add('bg-white', 'shadow-inner', 'ring-1', 'ring-slate-300', 'rounded-md', 'outline-none'); } }); document.getElementById('format-toolbar').classList.remove('hidden', 'translate-y-20', 'opacity-0'); document.getElementById('format-toolbar').classList.add('translate-y-0', 'opacity-100'); alert("Activity Log unlocked."); } else { alert("Incorrect Password."); } }
+        function promptAdminActivity() { if(prompt("Enter Admin Password to Log Activity:") === "Passme12") { const tbody = document.getElementById('activity-table-body'); tbody.classList.add('is-editing-log'); const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }); const tr = document.createElement('tr'); tr.className = 'hover:bg-slate-50 transition-colors align-top'; tr.innerHTML = `<td class="px-6 py-4 font-mono text-xs whitespace-nowrap pt-5">${date}</td><td class="px-6 py-4 font-bold text-primary-700 bg-white shadow-inner ring-1 ring-slate-300 rounded-md outline-none pt-5" contenteditable="true">Name</td><td class="px-6 py-4 activity-cell bg-white shadow-inner ring-1 ring-slate-300 rounded-md outline-none" contenteditable="true"><ul class="space-y-2"><li>Describe changes...</li></ul></td>`; tbody.insertBefore(tr, tbody.firstChild); document.getElementById('format-toolbar').classList.remove('hidden', 'translate-y-20', 'opacity-0'); document.getElementById('format-toolbar').classList.add('translate-y-0', 'opacity-100'); const dateSpan = document.getElementById('doc-date'); if (dateSpan) dateSpan.innerText = date; } else { alert("Incorrect Password."); } }
+        function execCmd(command) { document.execCommand(command, false, null); }
+        function wrapTag(type) { const selection = window.getSelection(); if (!selection.rangeCount || selection.isCollapsed) { alert("Highlight text first."); return; } const range = selection.getRangeAt(0); let node; if (type === 'val') { node = document.createElement('span'); node.className = 'val'; } else if (type === 'ui') { node = document.createElement('span'); node.className = 'ui'; } else if (type === 'kbd') { node = document.createElement('kbd'); } if (node) { node.appendChild(range.extractContents()); range.insertNode(node); selection.removeAllRanges(); } }
+        
+        function downloadGuide() { 
+            document.querySelectorAll('.is-editing').forEach(card => toggleEditCard(card.querySelector('.edit-btn'))); 
+            const wasEditMode = document.body.classList.contains('edit-mode'); document.body.classList.remove('edit-mode'); 
+            
+            document.querySelectorAll('.injected-tool').forEach(el => el.remove()); 
+            document.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable')); 
+            document.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+
+            const activityTable = document.getElementById('activity-table-body'); 
+            if (activityTable) { 
+                activityTable.classList.remove('is-editing-log'); 
+                activityTable.querySelectorAll('td[contenteditable]').forEach(td => { td.removeAttribute('contenteditable'); td.classList.remove('bg-white', 'shadow-inner', 'ring-1', 'ring-slate-300', 'rounded-md', 'outline-none'); }); 
+            } 
+            const dateSpan = document.getElementById('doc-date'); 
+            if (activityTable && dateSpan) { 
+                const firstRowDate = activityTable.querySelector('tr td:first-child'); 
+                if (firstRowDate) { dateSpan.innerText = firstRowDate.innerText.trim(); } 
+            } 
+            document.querySelectorAll('input[type="text"]').forEach(input => { input.setAttribute('value', input.value); }); 
+            
+            document.getElementById('format-toolbar').classList.add('hidden', 'translate-y-20', 'opacity-0'); 
+            document.getElementById('format-toolbar').classList.remove('translate-y-0', 'opacity-100'); 
+            document.getElementById('downloadGuideBtn').classList.add('hidden'); 
+            document.getElementById('exportFieldGuideBtn').classList.add('hidden'); 
+            
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML; 
+            const blob = new Blob([htmlContent], {type: "text/html;charset=utf-8"}); 
+            const url = URL.createObjectURL(blob); 
+            const a = document.createElement('a'); a.href = url; 
+            a.download = `Master_Guide_Update_${new Date().toISOString().split('T')[0]}.html`; a.click(); URL.revokeObjectURL(url); 
+            setTimeout(() => { initEditTools(); if(wasEditMode) toggleGlobalEditMode(); }, 500); 
+        }
+
+        function exportFieldGuide() { 
+            document.querySelectorAll('.is-editing').forEach(card => toggleEditCard(card.querySelector('.edit-btn'))); 
+            const cloneNode = document.documentElement.cloneNode(true); 
+            cloneNode.querySelectorAll('.tab-content').forEach(tab => { 
+                const id = tab.id; 
+                if(id === 'tab-tutorial' || id === 'tab-activity' || tab.querySelectorAll('.step-card').length === 0) { tab.remove(); const navBtn = cloneNode.querySelector(`button[onclick="switchTab('${id}')"]`); if(navBtn) navBtn.remove(); } 
+            }); 
+            const remainingTabs = cloneNode.querySelectorAll('.tab-content'); 
+            const remainingNavs = cloneNode.querySelectorAll('.nav-link'); 
+            if(remainingTabs.length > 0) { 
+                remainingTabs.forEach(t => t.classList.remove('active')); 
+                remainingTabs[0].classList.add('active'); 
+                remainingNavs.forEach(n => { n.classList.remove('bg-primary-600', 'text-white', 'shadow-md', 'bg-slate-950'); n.classList.add('text-slate-400'); }); 
+                remainingNavs[0].classList.remove('text-slate-400'); remainingNavs[0].classList.add('bg-primary-600', 'text-white', 'shadow-md'); 
+            } 
+            
+            cloneNode.querySelectorAll('.injected-tool, #format-toolbar, #editModeToggle, #downloadGuideBtn, #exportFieldGuideBtn').forEach(el => el.remove()); 
+            cloneNode.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable')); 
+            cloneNode.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+            cloneNode.querySelector('body').classList.remove('edit-mode'); 
+            
+            const title = cloneNode.querySelector('title'); if(title) title.innerText = "Custom Field Guide - TarusNC"; 
+            const mainHeader = cloneNode.querySelector('aside h1'); if(mainHeader) mainHeader.innerHTML = 'Field <span class="text-primary-500">Guide</span>'; 
+            const subHeader = cloneNode.querySelector('aside p'); if(subHeader) subHeader.innerHTML = "Custom Step Extraction<br>TarusNC"; 
+            
+            const htmlContent = "<!DOCTYPE html>\n" + cloneNode.outerHTML; 
+            const blob = new Blob([htmlContent], {type: "text/html;charset=utf-8"}); 
+            const url = URL.createObjectURL(blob); 
+            const a = document.createElement('a'); a.href = url; a.download = `Field_Guide_${new Date().toISOString().split('T')[0]}.html`; a.click(); URL.revokeObjectURL(url); 
+        }
+
+        function copyCode(btn) { const preElement = btn.nextElementSibling; const textToCopy = preElement.innerText; navigator.clipboard.writeText(textToCopy).then(() => { const originalText = btn.innerText; btn.innerText = 'Copied!'; btn.classList.replace('bg-slate-800', 'bg-slate-900'); btn.classList.replace('text-slate-300', 'text-white'); setTimeout(() => { btn.innerText = originalText; btn.classList.replace('bg-slate-900', 'bg-slate-800'); btn.classList.replace('text-white', 'text-slate-300'); }, 2000); }).catch(err => { try { const textarea = document.createElement('textarea'); textarea.value = textToCopy; document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea); const originalText = btn.innerText; btn.innerText = 'Copied!'; btn.classList.replace('bg-slate-800', 'bg-slate-900'); btn.classList.replace('text-slate-300', 'text-white'); setTimeout(() => { btn.innerText = originalText; btn.classList.replace('bg-slate-900', 'bg-slate-800'); btn.classList.replace('text-white', 'text-slate-300'); }, 2000); } catch(e) { alert('Copy failed.'); } }); }
+    </script>
+</body>
+</html>
